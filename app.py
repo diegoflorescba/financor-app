@@ -9,6 +9,7 @@ import io
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from sqlalchemy import or_
+import locale
 
 
 app = Flask(__name__)
@@ -171,13 +172,39 @@ def registro():
 
 @app.route('/reportes')
 def reportes():
-    # Obtener todos los préstamos con sus clientes
-    prestamos = Prestamo.query.join(Cliente).order_by(
-        Prestamo.fecha_inicio.desc()).all()
-
+    # Configurar el locale en español
+    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+    
+    # Obtener todos los préstamos activos
+    prestamos = Prestamo.query.filter(
+        Prestamo.estado == 'ACTIVO',
+        Prestamo.monto_adeudado > 0
+    ).all()
+    
+    # Calcular el total adeudado general
+    total_adeudado = sum(prestamo.monto_adeudado for prestamo in prestamos)
+    
+    # Obtener el mes actual
+    mes_actual = datetime.now()
+    
+    # Calcular el adeudado del mes actual (cuotas pendientes de este mes)
+    adeudado_mes_actual = db.session.query(db.func.sum(Cuota.monto))\
+        .join(Prestamo)\
+        .filter(
+            Prestamo.estado == 'ACTIVO',
+            Cuota.estado == 'PENDIENTE',
+            db.extract('month', Cuota.fecha_vencimiento) == mes_actual.month,
+            db.extract('year', Cuota.fecha_vencimiento) == mes_actual.year
+        ).scalar() or 0.0
+    
+    # Formatear la fecha en español
+    mes_actual_str = mes_actual.strftime('%B %Y').capitalize()
+    
     return render_template('reportes.html',
-                           prestamos=prestamos,
-                           mes_actual=datetime.now().strftime('%B %Y'))
+                         prestamos=prestamos,
+                         mes_actual=mes_actual_str,
+                         total_adeudado=total_adeudado,
+                         adeudado_mes_actual=adeudado_mes_actual)
 
 
 @app.route('/cuotas_a_vencer')
