@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="dashboard">
+    <h1>Sistema de Préstamos</h1>
+    <h2>Seleccione una opción</h2>
+
+    <div class="button-group">
+        <a href="{{ url_for('registro') }}" class="dashboard-button primary">
+            <i class="fas fa-user-plus"></i>
+            Registrar Nuevo Cliente
+        </a>
+        <a href="{{ url_for('reportes') }}" class="dashboard-button secondary">
+            <i class="fas fa-chart-bar"></i>
+            Ver Reportes
+        </a>
+    </div>
+</div>
+{% endblock %}

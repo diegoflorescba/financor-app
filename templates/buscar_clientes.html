@@ -1,0 +1,134 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div
+        class="mb-4 p-4 rounded-lg {% if category == 'success' %}bg-green-100 text-green-700{% else %}bg-red-100 text-red-700{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+    <h1 class="text-2xl font-bold mb-6">Asignar Prestamo</h1>
+
+    <div class="mb-6">
+        <div class="flex gap-4 mb-4">
+            <input type="text" id="searchQuery" class="flex-1 p-2 border rounded"
+                placeholder="Ingrese DNI, nombre o apellido...">
+
+            <select id="searchType" class="p-2 border rounded">
+                <option value="todos">Todos los campos</option>
+                <option value="dni">DNI</option>
+                <option value="apellido">Apellido</option>
+            </select>
+
+            <button onclick="buscarClientes()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Buscar
+            </button>
+        </div>
+    </div>
+
+    <!-- Resultados de la búsqueda -->
+    <div id="resultados" class="mt-4">
+        <!-- Los resultados se insertarán aquí dinámicamente -->
+    </div>
+</div>
+
+<script>
+    async function buscarClientes() {
+        const query = document.getElementById('searchQuery').value.trim();
+        const tipo = document.getElementById('searchType').value;
+        const resultadosDiv = document.getElementById('resultados');
+
+        // Validación básica
+        if (!query) {
+            resultadosDiv.innerHTML = '<p class="text-yellow-500">Por favor, ingrese un término de búsqueda</p>';
+            return;
+        }
+
+        // Mostrar indicador de carga
+        resultadosDiv.innerHTML = '<p class="text-gray-600">Buscando...</p>';
+
+        try {
+            const response = await fetch(`/api/buscar_clientes?query=${encodeURIComponent(query)}&tipo=${tipo}`);
+            const data = await response.json();
+
+            // Log para debugging
+            console.log('Response:', {
+                status: response.status,
+                data: data
+            });
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Error en la búsqueda');
+            }
+
+            if (data.error) {
+                resultadosDiv.innerHTML = `<p class="text-red-500">${data.error}</p>`;
+                return;
+            }
+
+            if (data.length === 0) {
+                resultadosDiv.innerHTML = '<p class="text-gray-600">No se encontraron resultados</p>';
+                return;
+            }
+
+            // Construir la tabla de resultados
+            let html = `
+            <table class="min-w-full bg-white border">
+                <thead>
+                    <tr class="bg-gray-100">
+                        <th class="px-4 py-2 border">Nombre</th>
+                        <th class="px-4 py-2 border">Apellido</th>
+                        <th class="px-4 py-2 border">DNI</th>
+                        <th class="px-4 py-2 border">Teléfono</th>
+                        <th class="px-4 py-2 border">Email</th>
+                        <th class="px-4 py-2 border">Dirección</th>
+                        <th class="px-4 py-2 border">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+            data.forEach(cliente => {
+                html += `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 border">${cliente.nombre || '-'}</td>
+                    <td class="px-4 py-2 border">${cliente.apellido || '-'}</td>
+                    <td class="px-4 py-2 border">${cliente.dni || '-'}</td>
+                    <td class="px-4 py-2 border">${cliente.telefono || '-'}</td>
+                    <td class="px-4 py-2 border">${cliente.correo_electronico || '-'}</td>
+                    <td class="px-4 py-2 border">${cliente.direccion || '-'}</td>
+                    <td class="px-4 py-2 border">
+                        <button onclick="window.location.href='/cargar_prestamo/${cliente.id_cliente}'"
+                                class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition-colors">
+                            Cargar Préstamo
+                        </button>
+                    </td>
+                </tr>
+            `;
+            });
+
+            html += '</tbody></table>';
+            resultadosDiv.innerHTML = html;
+        } catch (error) {
+            console.error('Error detallado:', error);
+            resultadosDiv.innerHTML = `
+                <p class="text-red-500">
+                    Error al realizar la búsqueda: ${error.message}. Por favor, intente nuevamente.
+                </p>
+            `;
+        }
+    }
+
+    // Agregar evento para buscar al presionar Enter
+    document.getElementById('searchQuery').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            buscarClientes();
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Listado de Préstamos por Cliente</h2>
+
+    <div class="accordion" id="accordionPrestamos">
+        {% for cliente in clientes %}
+        <div class="accordion-item">
+            <!-- Cabecera del Cliente -->
+            <h2 class="accordion-header" id="heading{{ cliente.id_cliente }}">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapse{{ cliente.id_cliente }}" aria-expanded="false"
+                    aria-controls="collapse{{ cliente.id_cliente }}">
+                    <div class="row w-100">
+                        <div class="col-md-3">{{ cliente.nombre }} {{ cliente.apellido }}</div>
+                        <div class="col-md-3">DNI: {{ cliente.dni }}</div>
+                        <div class="col-md-3">Tel: {{ cliente.telefono }}</div>
+                        <div class="col-md-3">Total Préstamos: {{ cliente.prestamos|length }}</div>
+                    </div>
+                </button>
+            </h2>
+
+            <!-- Contenido de Préstamos -->
+            <div id="collapse{{ cliente.id_cliente }}" class="accordion-collapse collapse"
+                aria-labelledby="heading{{ cliente.id_cliente }}" data-bs-parent="#accordionPrestamos">
+                <div class="accordion-body">
+                    {% if cliente.prestamos %}
+                    {% for prestamo in cliente.prestamos %}
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <strong>Préstamo #{{ prestamo.id_prestamo }}</strong> -
+                            Monto: ${{ "%.2f"|format(prestamo.monto_prestado) }} -
+                            Fecha: {{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}
+                        </div>
+                        <div class="card-body">
+                            {% if prestamo.cuotas %}
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Cuota #</th>
+                                        <th>Vencimiento</th>
+                                        <th>Monto</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for cuota in prestamo.cuotas %}
+                                    <tr>
+                                        <td>{{ cuota.numero_cuota }}</td>
+                                        <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                                        <td>${{ "%.2f"|format(cuota.monto) }}</td>
+                                        <td>
+                                            <span
+                                                class="badge {% if cuota.pagada %}bg-success{% else %}bg-danger{% endif %}">
+                                                {{ 'Pagada' if cuota.pagada else 'Pendiente' }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <p class="text-muted">No hay cuotas registradas para este préstamo.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-muted">Este cliente no tiene préstamos registrados.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-info">No hay clientes registrados en el sistema.</div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="reports-container">
+    <h1 class="main-title">Cuotas a Vencer - {{ mes_actual }}</h1>
+
+    <div class="report-card">
+        <div class="report-header">
+            <div class="report-actions">
+                <a href="{{ url_for('exportar_excel') }}" class="btn-action excel">
+                    <i class="fas fa-file-excel"></i> Exportar Excel
+                </a>
+                <button class="btn-action pdf" onclick="window.print()">
+                    <i class="fas fa-file-pdf"></i> Imprimir PDF
+                </button>
+            </div>
+            <div class="report-summary">
+                <p class="total-amount">Total a cobrar: ${{ "{:,.2f}".format(total_a_cobrar) }}</p>
+                <p class="cuotas-count">Cantidad de cuotas: {{ cuotas|length }}</p>
+            </div>
+        </div>
+
+        <div class="report-table-wrapper">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Cliente</th>
+                        <th>Teléfono</th>
+                        <th>Cuota</th>
+                        <th>Vencimiento</th>
+                        <th>Monto</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cuota in cuotas %}
+                    <tr class="{{ 'row-warning' if (cuota.fecha_vencimiento.date() - today).days <= 3 }}">
+                        <td>{{ cuota.prestamo.cliente.apellido }}, {{ cuota.prestamo.cliente.nombre }}</td>
+                        <td>{{ cuota.prestamo.cliente.telefono }}</td>
+                        <td class="text-center">{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}</td>
+                        <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                        <td class="text-right">${{ "{:,.2f}".format(cuota.monto) }}</td>
+                        <td class="text-center">
+                            <span class="status-badge 
+                                {{ 'danger' if cuota.fecha_vencimiento.date() < today else 
+                                   'warning' if (cuota.fecha_vencimiento.date() - today).days <= 3 else 
+                                   'info' }}">
+                                {% if cuota.fecha_vencimiento.date() < today %} Vencida ({{ (today -
+                                    cuota.fecha_vencimiento.date()).days }} días) {% else %} {{
+                                    (cuota.fecha_vencimiento.date() - today).days }} días {% endif %} </span>
+                        </td>
+                        <td class="text-center">
+                            <div class="action-buttons">
+                                <a href="{{ url_for('ver_cliente', id=cuota.prestamo.cliente.id_cliente) }}"
+                                    class="btn-icon" title="Ver cliente">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% if not cuota.pagada and cuota.fecha_vencimiento.month == today.month %}
+                                <form action="{{ url_for('pagar_cuota', cuota_id=cuota.id_cuota) }}" method="POST"
+                                    style="display: inline;">
+                                    <button type="submit" class="btn-icon success"
+                                        onclick="return confirm('¿Confirmar el pago de la cuota por ${{ '{:,.2f}'.format(cuota.monto) }}?')"
+                                        title="Registrar pago">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

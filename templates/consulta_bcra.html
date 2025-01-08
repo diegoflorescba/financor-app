@@ -1,0 +1,123 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-12">
+            <h2 class="mb-4 text-center">Consulta Situación BCRA</h2>
+
+            <!-- Formulario de búsqueda -->
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <form method="POST" action="{{ url_for('consultar_bcra') }}" class="row g-3 align-items-end">
+                        <div class="col-md-9">
+                            <label for="identificacion" class="form-label fs-5">
+                                <i class="fas fa-id-card"></i> Identificación (CUIT/CUIL/DNI)
+                            </label>
+                            <input type="number" class="form-control form-control-lg" id="identificacion"
+                                name="identificacion" required placeholder="Ingrese el número sin guiones"
+                                style="height: 3rem;">
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-primary btn-lg w-100" style="height: 3rem;">
+                                <i class="fas fa-search"></i> Consultar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-danger mt-4 shadow-sm" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i> {{ error }}
+            </div>
+            {% endif %}
+
+            {% if resultado %}
+            <div class="card mt-4 shadow">
+                <!-- Encabezado con el resultado -->
+                <div class="card-header bg-{{ resultado.clase }} text-white py-3">
+                    <h5 class="mb-0 text-center">
+                        {% if resultado.clase == 'success' %}
+                        <i class="fas fa-check-circle me-2"></i>
+                        {% else %}
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        {% endif %}
+                        {{ resultado.estado }}
+                    </h5>
+                </div>
+
+                <div class="card-body p-4">
+                    <!-- Datos del cliente -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title mb-3">
+                                        <i class="fas fa-user me-2"></i>Datos del Cliente
+                                    </h6>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <p class="mb-2"><strong>Nombre/Razón Social:</strong></p>
+                                            <p class="text-muted">{{ resultado.denominacion }}</p>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <p class="mb-2"><strong>Identificación:</strong></p>
+                                            <p class="text-muted">{{ resultado.identificacion }}</p>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <p class="mb-2"><strong>Período:</strong></p>
+                                            <p class="text-muted">{{ resultado.periodo }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabla de entidades -->
+                    <div class="mt-4">
+                        <h6 class="mb-3">
+                            <i class="fas fa-university me-2"></i>Detalle por Entidad
+                        </h6>
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="min-width: 200px">Entidad</th>
+                                        <th style="min-width: 100px">Situación</th>
+                                        <th style="min-width: 120px">Monto</th>
+                                        <th style="min-width: 120px">Última Act.</th>
+                                        <th style="min-width: 100px">Días Atraso</th>
+                                        <th style="min-width: 120px">Refinanc.</th>
+                                        <th style="min-width: 120px">Proc. Judicial</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for detalle in resultado.detalles %}
+                                    <tr>
+                                        <td>{{ detalle.entidad }}</td>
+                                        <td>
+                                            <span
+                                                class="badge bg-{{ 'success' if detalle.situacion == 1 else 'warning' }}">
+                                                {{ detalle.situacion }}
+                                            </span>
+                                        </td>
+                                        <td>${{ detalle.monto|round(2) }}</td>
+                                        <td>{{ detalle.fecha }}</td>
+                                        <td>{{ detalle.diasAtraso }}</td>
+                                        <td>{{ detalle.refinanciaciones }}</td>
+                                        <td>{{ detalle.procesoJudicial }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

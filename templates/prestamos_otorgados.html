@@ -1,0 +1,106 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-6xl">
+    <div class="mb-8 text-center">
+        <h2 class="text-3xl font-bold text-gray-800 mb-2">Préstamos Otorgados</h2>
+        <p class="text-gray-600">Ingrese el DNI del cliente para buscar</p>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <div class="flex items-end">
+            <div class="flex-grow">
+                <label class="block text-sm font-medium text-gray-700 mb-2" for="dni_busqueda">
+                    DNI del Cliente
+                </label>
+                <div class="relative">
+                    <input type="text" id="dni_busqueda"
+                        class="block w-full rounded-lg border-gray-300 bg-gray-50 py-3 px-4 pr-10 focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="Ingrese el DNI del cliente">
+                    <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+                        <i class="fas fa-search text-gray-400"></i>
+                    </div>
+                </div>
+            </div>
+            <button id="buscar_dni_btn"
+                class="ml-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Buscar
+            </button>
+        </div>
+
+        <div id="resultados_dni" class="hidden mt-6">
+            <div class="overflow-hidden rounded-lg border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Apellido y Nombre</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                DNI</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Teléfono</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla_resultados_dni" class="bg-white divide-y divide-gray-200">
+                        <!-- Los resultados se insertarán aquí dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        $('#buscar_dni_btn').on('click', function () {
+            buscarPorDNI();
+        });
+
+        function buscarPorDNI() {
+            const dni = $('#dni_busqueda').val().trim();
+
+            if (dni.length < 3) {
+                alert('Por favor, ingrese al menos 3 caracteres para buscar.');
+                return;
+            }
+
+            $('#tabla_resultados_dni').html('<tr><td colspan="3" class="text-center py-4">Buscando...</td></tr>');
+            $('#resultados_dni').removeClass('hidden');
+
+            $.ajax({
+                url: '/buscar_por_dni',  // Asegúrate de que esta URL sea correcta
+                method: 'GET',
+                data: { dni: dni },
+                success: function (data) {
+                    const tbody = $('#tabla_resultados_dni');
+                    tbody.empty();
+
+                    if (data.length > 0) {
+                        data.forEach(cliente => {
+                            tbody.append(`
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        ${cliente.apellido}, ${cliente.nombre}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        ${cliente.dni}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        ${cliente.telefono || '-'}
+                                    </td>
+                                </tr>
+                            `);
+                        });
+                    } else {
+                        tbody.html('<tr><td colspan="3" class="text-center py-4 text-gray-500">No se encontraron resultados</td></tr>');
+                    }
+                },
+                error: function () {
+                    const tbody = $('#tabla_resultados_dni');
+                    tbody.html('<tr><td colspan="3" class="text-center py-4 text-red-500">Error al realizar la búsqueda</td></tr>');
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

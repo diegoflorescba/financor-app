@@ -1,0 +1,42 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h1>Detalles del Cliente</h1>
+
+<div class="cliente-info">
+    <h2>{{ cliente.nombre }} {{ cliente.apellido }}</h2>
+
+    <h3>Información Personal</h3>
+    <ul>
+        <li><strong>DNI:</strong> {{ cliente.dni }}</li>
+        <li><strong>Dirección:</strong> {{ cliente.direccion }}</li>
+        <li><strong>Teléfono:</strong> {{ cliente.telefono }}</li>
+        <li><strong>Email:</strong> {{ cliente.correo_electronico }}</li>
+        <li><strong>Documentación verificada:</strong>
+            {% if cliente.documentacion_verificada %}Sí{% else %}No{% endif %}
+        </li>
+    </ul>
+
+    <h3>Préstamos</h3>
+    {% if cliente.prestamos %}
+    {% for prestamo in cliente.prestamos %}
+    <div class="prestamo-info">
+        <h4>Préstamo #{{ prestamo.id_prestamo }}</h4>
+        <ul>
+            <li><strong>Monto:</strong> ${{ prestamo.monto_prestado }}</li>
+            <li><strong>Interés:</strong> {{ prestamo.tasa_interes }}%</li>
+            <li><strong>Cuotas totales:</strong> {{ prestamo.cuotas_totales }}</li>
+            <li><strong>Cuotas pendientes:</strong> {{ prestamo.cuotas_pendientes }}</li>
+            <li><strong>Monto por cuota:</strong> ${{ prestamo.monto_cuotas }}</li>
+            <li><strong>Fecha inicio:</strong> {{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</li>
+            <li><strong>Fecha finalización:</strong> {{ prestamo.fecha_vencimiento.strftime('%d/%m/%Y') }}</li>
+        </ul>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p>Este cliente no tiene préstamos registrados.</p>
+    {% endif %}
+</div>
+
+<a href="{{ url_for('reportes') }}" class="button">Volver a Reportes</a>
+{% endblock %}

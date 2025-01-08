@@ -1,0 +1,248 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-10 col-lg-8">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body p-4">
+                    <!-- Encabezado -->
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="rounded-3 me-3 header-icon">
+                            <i class="fas fa-user-plus"></i>
+                        </div>
+                        <h3 class="mb-0 fw-semibold">Nuevo Cliente</h3>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('nuevo_cliente') }}" class="needs-validation" novalidate>
+                        <!-- Datos Personales -->
+                        <div class="row g-3">
+                            <!-- Nombre y Apellido -->
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="nombre" class="form-label">Nombre</label>
+                                    <input type="text" class="form-control custom-input" id="nombre" name="nombre"
+                                        required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="apellido" class="form-label">Apellido</label>
+                                    <input type="text" class="form-control custom-input" id="apellido" name="apellido"
+                                        required>
+                                </div>
+                            </div>
+
+                            <!-- DNI y Teléfono -->
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="dni" class="form-label">DNI</label>
+                                    <input type="text" class="form-control custom-input" id="dni" name="dni" required
+                                        maxlength="8">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="telefono" class="form-label">Teléfono</label>
+                                    <input type="tel" class="form-control custom-input" id="telefono" name="telefono"
+                                        required>
+                                </div>
+                            </div>
+
+                            <!-- Email y Dirección -->
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="correo_electronico" class="form-label">Email</label>
+                                    <input type="email" class="form-control custom-input" id="correo_electronico"
+                                        name="correo_electronico">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="direccion" class="form-label">Dirección</label>
+                                    <input type="text" class="form-control custom-input" id="direccion"
+                                        name="direccion">
+                                </div>
+                            </div>
+
+                            <!-- Checkboxes -->
+                            <div class="col-12 mt-3">
+                                <div class="d-flex gap-4">
+                                    <div class="form-check custom-checkbox">
+                                        <input type="checkbox" class="form-check-input" id="documentacion_verificada"
+                                            name="documentacion_verificada">
+                                        <label class="form-check-label" for="documentacion_verificada">
+                                            Documentación Verificada
+                                        </label>
+                                    </div>
+                                    <div class="form-check custom-checkbox">
+                                        <input type="checkbox" class="form-check-input" id="activo" name="activo"
+                                            checked>
+                                        <label class="form-check-label" for="activo">
+                                            Cliente Activo
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <input type="hidden" name="fecha_registro"
+                            value="{{ datetime.now().strftime('%Y-%m-%d %H:%M:%S') }}">
+
+                        <!-- Botones -->
+                        <div class="d-flex gap-3 mt-4">
+                            <button type="button" class="btn btn-outline-secondary flex-grow-1"
+                                onclick="window.location.href='{{ url_for('clientes') }}'">
+                                Cancelar
+                            </button>
+                            <button type="submit" class="btn btn-primary flex-grow-1">
+                                Guardar Cliente
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    :root {
+        --primary-color: #6366f1;
+        --primary-hover: #4f46e5;
+        --border-color: #e5e7eb;
+        --input-focus: #eef2ff;
+    }
+
+    .card {
+        background: #ffffff;
+        transition: all 0.3s ease;
+        max-width: 100%;
+    }
+
+    .card-body {
+        padding: 1.5rem;
+    }
+
+    .header-icon {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--input-focus);
+        color: var(--primary-color);
+    }
+
+    .form-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 0.25rem;
+    }
+
+    .custom-input {
+        height: 38px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 0.375rem 0.75rem;
+        font-size: 0.9rem;
+        transition: all 0.2s ease;
+        width: 100%;
+    }
+
+    .custom-input:focus {
+        border-color: var(--primary-color);
+        background-color: var(--input-focus);
+        box-shadow: none;
+    }
+
+    .form-group {
+        margin-bottom: 0.25rem;
+    }
+
+    .btn {
+        padding: 0.5rem 1.25rem;
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        height: 38px;
+    }
+
+    .btn-primary {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+
+    .btn-primary:hover {
+        background-color: var(--primary-hover);
+        border-color: var(--primary-hover);
+    }
+
+    .btn-outline-secondary {
+        color: #4b5563;
+        border-color: var(--border-color);
+    }
+
+    .btn-outline-secondary:hover {
+        background-color: #f3f4f6;
+        border-color: var(--border-color);
+        color: #374151;
+    }
+
+    .custom-checkbox .form-check-input {
+        border-color: var(--border-color);
+        width: 1rem;
+        height: 1rem;
+    }
+
+    .custom-checkbox .form-check-input:checked {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+
+    .custom-checkbox .form-check-label {
+        color: #4b5563;
+        font-size: 0.85rem;
+    }
+
+    .row.g-3 {
+        --bs-gutter-x: 1rem;
+        --bs-gutter-y: 1rem;
+    }
+
+    @media (hover: hover) {
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+        }
+    }
+</style>
+
+<script>
+    $(document).ready(function () {
+        // Validación de DNI (solo números)
+        $('#dni').on('input', function () {
+            this.value = this.value.replace(/[^0-9]/g, '');
+        });
+
+        // Formateo de teléfono
+        $('#telefono').on('input', function () {
+            this.value = this.value.replace(/[^0-9]/g, '');
+            let cleaned = this.value.replace(/\D/g, '');
+            let match = cleaned.match(/^(\d{0,4})(\d{0,4})(\d{0,4})$/);
+            if (match) {
+                this.value = match[1] + (match[2] ? '-' + match[2] : '') + (match[3] ? '-' + match[3] : '');
+            }
+        });
+
+        // Capitalizar primera letra
+        $('#nombre, #apellido').on('input', function () {
+            let val = $(this).val();
+            if (val.length > 0) {
+                $(this).val(val.charAt(0).toUpperCase() + val.slice(1));
+            }
+        });
+    });
+</script>
+{% endblock %}
