@@ -575,6 +575,7 @@ def ver_cuotas(prestamo_id):
 @app.route('/consultar_bcra', methods=['GET', 'POST'])
 def consultar_bcra():
     resultado = None
+    resultado_cheques = None
     error = None
 
     if request.method == 'POST':
@@ -583,56 +584,125 @@ def consultar_bcra():
             if not identificacion:
                 raise ValueError("Por favor ingrese una identificación")
 
-            response = requests.get(
-                BCRA_API_URL.format(identificacion), verify=False)
+            # Consulta deudas (principal)
+            response = requests.get(BCRA_API_URL.format(identificacion), verify=False)
+            
+            if response.status_code != 200:
+                raise Exception(f"Error en la consulta principal: {response.status_code}")
 
-            if response.status_code == 200:
-                data = response.json()
+            # Procesar datos de deudas
+            data = response.json()
+            if 'results' in data and 'periodos' in data['results'] and data['results']['periodos']:
+                todas_situacion_1 = True
+                situaciones_encontradas = set()
+                detalles = []
 
-                if 'results' in data and 'periodos' in data['results']:
-                    todas_situacion_1 = True
-                    situaciones_encontradas = set()
-                    detalles = []
+                ultimo_periodo = data['results']['periodos'][0]
 
-                    # Tomamos el período más reciente
-                    ultimo_periodo = data['results']['periodos'][0]
+                for entidad in ultimo_periodo.get('entidades', []):
+                    if entidad['situacion'] != 1:
+                        todas_situacion_1 = False
+                        situaciones_encontradas.add(entidad['situacion'])
 
-                    for entidad in ultimo_periodo['entidades']:
-                        if entidad['situacion'] != 1:
-                            todas_situacion_1 = False
-                            situaciones_encontradas.add(entidad['situacion'])
+                    detalles.append({
+                        'entidad': entidad['entidad'],
+                        'situacion': entidad['situacion'],
+                        'monto': entidad['monto'],
+                        'fecha': entidad.get('fechaSit1', 'No disponible'),
+                        'diasAtraso': entidad.get('diasAtrasoPago', 0),
+                        'refinanciaciones': 'Sí' if entidad.get('refinanciaciones', False) else 'No',
+                        'procesoJudicial': 'Sí' if entidad.get('procesoJud', False) else 'No'
+                    })
 
-                        detalles.append({
-                            'entidad': entidad['entidad'],
-                            'situacion': entidad['situacion'],
-                            'monto': entidad['monto'],
-                            'fecha': entidad.get('fechaSit1', 'No disponible'),
-                            'diasAtraso': entidad.get('diasAtrasoPago', 0),
-                            'refinanciaciones': 'Sí' if entidad.get('refinanciaciones', False) else 'No',
-                            'procesoJudicial': 'Sí' if entidad.get('procesoJud', False) else 'No'
-                        })
-
-                    if todas_situacion_1:
-                        estado = 'Preaprobado: Situación 1'
-                        clase = 'success'
-                    else:
-                        situaciones = ', '.join(
-                            map(str, situaciones_encontradas))
-                        estado = f'Revisar: Situación {situaciones}'
-                        clase = 'warning'
-
-                    resultado = {
-                        'estado': estado,
-                        'clase': clase,
-                        'denominacion': data['results'].get('denominacion', ''),
-                        'identificacion': data['results'].get('identificacion', ''),
-                        'periodo': ultimo_periodo.get('periodo', ''),
-                        'detalles': detalles
-                    }
+                if todas_situacion_1:
+                    estado = 'Preaprobado: Situación 1'
+                    clase = 'success'
                 else:
-                    error = "No se encontraron datos para esta identificación"
+                    situaciones = ', '.join(map(str, situaciones_encontradas))
+                    estado = f'Revisar: Situación {situaciones}'
+                    clase = 'warning'
+
+                resultado = {
+                    'estado': estado,
+                    'clase': clase,
+                    'denominacion': data['results'].get('denominacion', ''),
+                    'identificacion': data['results'].get('identificacion', ''),
+                    'periodo': ultimo_periodo.get('periodo', ''),
+                    'detalles': detalles
+                }
             else:
-                error = f"Error en la consulta: {response.status_code}"
+                resultado = {
+                    'estado': 'Sin deudas registradas',
+                    'clase': 'success',
+                    'denominacion': data['results'].get('denominacion', ''),
+                    'identificacion': identificacion,
+                    'periodo': 'No disponible',
+                    'detalles': []
+                }
+
+            # Consulta cheques (secundaria)
+            try:
+                # Construir URL específica para cheques rechazados
+                base_url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/"
+                cheques_url = f"{base_url}ChequesRechazados/{identificacion}"
+                print(f"URL de consulta cheques: {cheques_url}")  # Debug
+                
+                response_cheques = requests.get(cheques_url, verify=False)
+                print(f"Status code cheques: {response_cheques.status_code}")  # Debug
+                print(f"Respuesta completa: {response_cheques.text}")  # Debug
+                
+                if response_cheques.status_code == 200:
+                    data_cheques = response_cheques.json()
+                    print(f"Data cheques parseada: {data_cheques}")  # Debug
+                    
+                    # Verificar la estructura completa de la respuesta
+                    if ('results' in data_cheques and 
+                        'causales' in data_cheques['results'] and 
+                        data_cheques['results']['causales']):
+                        
+                        cheques_detalles = []
+                        for causal in data_cheques['results']['causales']:
+                            print(f"Procesando causal: {causal}")  # Debug
+                            
+                            for entidad in causal.get('entidades', []):
+                                print(f"Procesando entidad: {entidad}")  # Debug
+                                
+                                for detalle in entidad.get('detalle', []):
+                                    print(f"Procesando detalle: {detalle}")  # Debug
+                                    
+                                    cheques_detalles.append({
+                                        'entidad': entidad['entidad'],
+                                        'causal': causal['causal'],
+                                        'nroCheque': detalle['nroCheque'],
+                                        'fechaRechazo': detalle['fechaRechazo'],
+                                        'monto': detalle['monto'],
+                                        'fechaPago': detalle.get('fechaPago', 'No Registra Pago'),
+                                        'fechaPagoMulta': detalle.get('fechaPagoMulta', 'No disponible'),
+                                        'estadoMulta': detalle.get('estadoMulta', 'No disponible'),
+                                        'procesoJudicial': 'Sí' if detalle.get('procesoJud', False) else 'No'
+                                    })
+
+                        if cheques_detalles:
+                            resultado_cheques = {
+                                'denominacion': data_cheques['results'].get('denominacion', ''),
+                                'identificacion': data_cheques['results'].get('identificacion', ''),
+                                'detalles': cheques_detalles
+                            }
+                            print(f"Resultado cheques final: {resultado_cheques}")  # Debug
+                        else:
+                            print("No se encontraron detalles de cheques")  # Debug
+                    else:
+                        print("Estructura de respuesta inválida o sin datos de cheques")  # Debug
+                        print(f"Estructura de data_cheques: {data_cheques}")  # Debug
+                else:
+                    print(f"Error en la consulta de cheques: Status {response_cheques.status_code}")
+                    print(f"Respuesta de error: {response_cheques.text}")  # Debug
+                
+            except Exception as e:
+                print(f"Error en consulta de cheques: {str(e)}")
+                print(f"Tipo de error: {type(e)}")
+                import traceback
+                traceback.print_exc()  # Esto imprimirá el stack trace completo
 
         except ValueError as ve:
             error = str(ve)
@@ -640,8 +710,12 @@ def consultar_bcra():
             error = f"Error de conexión: {str(e)}"
         except Exception as e:
             error = f"Error inesperado: {str(e)}"
+            print(f"Error detallado: {str(e)}")
 
-    return render_template('consulta_bcra.html', resultado=resultado, error=error)
+    return render_template('consulta_bcra.html', 
+                         resultado=resultado, 
+                         resultado_cheques=resultado_cheques, 
+                         error=error)
 
 
 @app.route('/prestamos_otorgados', methods=['GET'])
