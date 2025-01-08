@@ -73,7 +73,7 @@
 
         /* Contenedor principal */
         .container {
-            max-width: 1200px;
+            max-width: 95% !important;
             margin: 20px auto;
             padding: 0 20px;
         }
@@ -354,6 +354,40 @@
             font-size: 1.2rem;
             font-weight: bold;
             color: #28a745;
+        }
+
+        /* Estilos específicos para tablas */
+        .table-responsive {
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .table {
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        .table th,
+        .table td {
+            white-space: nowrap;
+            vertical-align: middle;
+            padding: 0.75rem;
+        }
+
+        /* Ajuste específico para fechas */
+        .date-column {
+            min-width: 100px;
+            white-space: nowrap !important;
+        }
+
+        /* Ajustes para las cards que contienen las tablas */
+        .card {
+            margin: 1rem auto;
+            width: 100%;
+        }
+
+        .card-body {
+            padding: 1.25rem;
         }
     </style>
 </head>

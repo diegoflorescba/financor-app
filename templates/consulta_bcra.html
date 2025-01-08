@@ -119,7 +119,7 @@
             {% endif %}
 
             {% if resultado_cheques and resultado_cheques.detalles %}
-            <div class="card mt-4 shadow">
+            <div class="card mt-4">
                 <div class="card-header bg-info text-white py-3">
                     <h5 class="mb-0 text-center">
                         <i class="fas fa-money-check me-2"></i>
@@ -127,42 +127,40 @@
                     </h5>
                 </div>
 
-                <div class="card-body p-4">
-                    <div class="table-responsive">
-                        <table class="table table-hover table-striped align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Entidad</th>
-                                    <th>Causal</th>
-                                    <th>N° Cheque</th>
-                                    <th>Fecha Rechazo</th>
-                                    <th>Monto</th>
-                                    <th>Fecha Pago</th>
-                                    <th>Estado Multa</th>
-                                    <th>Proc. Judicial</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for detalle in resultado_cheques.detalles %}
-                                <tr>
-                                    <td>{{ detalle.entidad }}</td>
-                                    <td>{{ detalle.causal }}</td>
-                                    <td>{{ detalle.nroCheque }}</td>
-                                    <td>{{ detalle.fechaRechazo }}</td>
-                                    <td>${{ detalle.monto|round(2) }}</td>
-                                    <td>{{ detalle.fechaPago }}</td>
-                                    <td>
-                                        <span
-                                            class="badge bg-{{ 'success' if detalle.estadoMulta == 'PAGADA' else 'warning' }}">
-                                            {{ detalle.estadoMulta }}
-                                        </span>
-                                    </td>
-                                    <td>{{ detalle.procesoJudicial }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="card-body">
+                    <table class="table table-hover table-striped align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Entidad</th>
+                                <th>Causal</th>
+                                <th>N° Cheque</th>
+                                <th class="date-column">Fecha Rechazo</th>
+                                <th>Monto</th>
+                                <th class="date-column">Fecha Pago</th>
+                                <th>Estado Multa</th>
+                                <th>Proc. Judicial</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for detalle in resultado_cheques.detalles %}
+                            <tr>
+                                <td>{{ detalle.entidad }}</td>
+                                <td>{{ detalle.causal }}</td>
+                                <td>{{ detalle.nroCheque }}</td>
+                                <td class="date-column">{{ detalle.fechaRechazo }}</td>
+                                <td>${{ detalle.monto|round(2) }}</td>
+                                <td class="date-column">{{ detalle.fechaPago }}</td>
+                                <td>
+                                    <span
+                                        class="badge bg-{{ 'success' if detalle.estadoMulta == 'PAGADA' else 'warning' }}">
+                                        {{ detalle.estadoMulta }}
+                                    </span>
+                                </td>
+                                <td>{{ detalle.procesoJudicial }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
             {% endif %}
