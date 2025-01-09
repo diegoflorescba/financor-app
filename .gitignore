@@ -1,2 +1,3 @@
 instance/credentials.json
 instance/token.json
+*.log
