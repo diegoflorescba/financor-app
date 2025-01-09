@@ -1,0 +1,50 @@
+Te guío paso a paso para crear el proyecto en Google Cloud Console y obtener las credenciales:
+Acceder a Google Cloud Console:
+Ve a https://console.cloud.google.com/
+Inicia sesión con tu cuenta de Google
+Crear un nuevo proyecto:
+Click en el selector de proyectos en la barra superior
+Click en "Nuevo Proyecto"
+Nombre: "Backup Prestamos DB" (o el que prefieras)
+Click en "Crear"
+Habilitar la API de Google Drive:
+En el menú lateral, ve a "APIs y servicios" > "Biblioteca"
+Busca "Google Drive API"
+Click en "Google Drive API"
+Click en "Habilitar"
+Configurar la pantalla de consentimiento:
+En "APIs y servicios" > "Pantalla de consentimiento de OAuth"
+Selecciona "Externo" y click en "Crear"
+Completa la información requerida:
+Nombre de la app: "Backup Prestamos"
+Email de soporte: tu email
+En "Dominios autorizados" puedes dejarlo vacío
+En la sección de información de contacto del desarrollador, agrega tu email
+Click en "Guardar y continuar"
+En "Scopes", click en "Guardar y continuar"
+En "Usuarios de prueba", click en "Guardar y continuar"
+Click en "Volver al panel"
+Crear credenciales:
+En "APIs y servicios" > "Credenciales"
+Click en "Crear Credenciales" > "ID de cliente de OAuth"
+Selecciona "Aplicación de escritorio"
+Nombre: "Backup App"
+Click en "Crear"
+Se descargará un archivo JSON automáticamente
+Configurar el archivo de credenciales:
+Renombra el archivo descargado a credentials.json
+Muévelo a la misma carpeta donde está tu script backup_db.py
+Primera ejecución:
+Ejecuta el script: python backup_db.py
+Se abrirá una ventana del navegador
+Selecciona tu cuenta de Google
+Verás una advertencia de "App no verificada"
+Click en "Continuar"
+Autoriza los permisos solicitados
+Se creará un archivo token.json en la carpeta
+Obtener ID de la carpeta de Drive:
+Ve a Google Drive
+Crea una nueva carpeta llamada "Backups DB"
+Abre la carpeta
+El ID está en la URL: https://drive.google.com/drive/folders/ESTE-ES-EL-ID
+Copia ese ID y reemplázalo en el script en la línea:
