@@ -55,14 +55,15 @@ BCRA_API_URL = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{}"
 
 
 @app.route('/')
+@app.route('/index')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', active_page='inicio')
 
 
 @app.route('/clientes')
 def clientes():
     clientes_list = Cliente.query.order_by(Cliente.apellido).all()
-    return render_template('clientes.html', clientes=clientes_list)
+    return render_template('clientes.html', clientes=clientes_list, active_page='clientes')
 
 
 @app.route('/cliente/nuevo', methods=['GET', 'POST'])
@@ -90,84 +91,102 @@ def nuevo_cliente():
             db.session.rollback()
             flash(f'Error al registrar el cliente: {str(e)}', 'error')
 
-    return render_template('cliente_nuevo.html', datetime=datetime)
+    return render_template('registro.html', datetime=datetime, active_page='clientes')
 
 
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
-    form_data = {}
-    errors = {}
-
     if request.method == 'POST':
+        form_data = request.form.to_dict()
+        errors = {}
+        
         try:
-            # Capturar todos los datos del formulario
-            form_data = {
-                'nombre': request.form['nombre'].upper(),
-                'apellido': request.form['apellido'].upper(),
-                'dni': request.form['dni'],
-                'direccion': request.form['direccion'],
-                'telefono': request.form['telefono'],
-                'correo_electronico': request.form['correo_electronico'],
-                'documentacion_verificada': request.form.get('documentacion_verificada') == 'on',
-                'tiene_prestamo': request.form.get('tiene_prestamo') == 'on'
-            }
-
-            # Verificar DNI y correo electrónico duplicados
-            cliente_existente = Cliente.query.filter(
-                or_(
-                    Cliente.dni == form_data['dni'],
-                    Cliente.correo_electronico == form_data['correo_electronico']
-                )
-            ).first()
-
-            if cliente_existente:
-                if cliente_existente.dni == form_data['dni']:
-                    errors['dni'] = 'Ya existe un cliente registrado con este DNI'
-                if cliente_existente.correo_electronico == form_data['correo_electronico']:
-                    errors['correo_electronico'] = 'Ya existe un cliente registrado con este correo electrónico'
-                return render_template('registro.html', form_data=form_data, errors=errors)
-
-            # Si no hay errores, proceder con el registro
+            # Corregir el manejo de checkbox
+            documentacion_verificada = 'documentacion_verificada' in form_data
+            
+            # Crear el cliente con el valor correcto del checkbox
             nuevo_cliente = Cliente(
                 nombre=form_data['nombre'],
                 apellido=form_data['apellido'],
                 dni=form_data['dni'],
-                direccion=form_data['direccion'],
-                telefono=form_data['telefono'],
-                correo_electronico=form_data['correo_electronico'],
-                documentacion_verificada=form_data['documentacion_verificada'],
-                fecha_registro=datetime.now(),
-                activo=True
+                direccion=form_data.get('direccion', ''),  # Usar get() para campos opcionales
+                telefono=form_data.get('telefono', ''),
+                correo_electronico=form_data.get('correo_electronico', ''),
+                documentacion_verificada=documentacion_verificada,
+                fecha_registro=datetime.now()
             )
+            
+            # Verificar DNI duplicado (solo si se proporcionó un DNI)
+            if form_data.get('dni'):
+                cliente_existente = Cliente.query.filter_by(dni=form_data['dni']).first()
+                if cliente_existente:
+                    errors['dni'] = 'Ya existe un cliente registrado con este DNI'
+            
+            # Verificar correo electrónico duplicado (solo si se proporcionó un correo)
+            if form_data.get('correo_electronico'):
+                cliente_existente = Cliente.query.filter_by(
+                    correo_electronico=form_data['correo_electronico']
+                ).first()
+                if cliente_existente:
+                    errors['correo_electronico'] = 'Ya existe un cliente con este correo'
+            
+            if errors:
+                return render_template('registro.html', form_data=form_data, errors=errors, active_page='clientes')
+            
             db.session.add(nuevo_cliente)
-            db.session.flush()
-
-            if form_data['tiene_prestamo']:
+            db.session.flush()  # Para obtener el id_cliente
+            
+            # Si incluye préstamo
+            if 'tiene_prestamo' in form_data:
+                # Crear préstamo
                 nuevo_prestamo = Prestamo(
                     id_cliente=nuevo_cliente.id_cliente,
-                    monto_prestado=float(form_data['monto']),
-                    tasa_interes=float(form_data['interes']),
+                    monto_prestado=float(form_data['monto_prestado']),
+                    tasa_interes=float(form_data['tasa_interes']),
                     cuotas_totales=int(form_data['cuotas_totales']),
-                    cuotas_pendientes=int(form_data['cuotas_pendientes']),
+                    cuotas_pendientes=int(form_data['cuotas_totales']),
                     monto_cuotas=float(form_data['monto_cuotas']),
                     monto_adeudado=float(form_data['monto_adeudado']),
-                    fecha_inicio=datetime.strptime(
-                        form_data['fecha_inicio'], '%Y-%m-%d').date(),
-                    fecha_vencimiento=datetime.strptime(
-                        form_data['fecha_finalizacion'], '%Y-%m-%d').date()
+                    fecha_inicio=datetime.strptime(form_data['fecha_inicio'], '%Y-%m-%d').date(),
+                    fecha_vencimiento=datetime.strptime(form_data['fecha_finalizacion'], '%Y-%m-%d').date()
                 )
+                
                 db.session.add(nuevo_prestamo)
-
+                db.session.flush()  # Para obtener el id_prestamo
+                
+                # Generar cuotas
+                fecha_inicio = datetime.strptime(form_data['fecha_inicio'], '%Y-%m-%d').date()
+                monto_cuota = float(form_data['monto_cuotas'])
+                
+                for i in range(int(form_data['cuotas_totales'])):
+                    # Calcular fecha de vencimiento (día 10 de cada mes)
+                    fecha_vencimiento = fecha_inicio + relativedelta(months=i+1)
+                    fecha_vencimiento = date(
+                        fecha_vencimiento.year,
+                        fecha_vencimiento.month,
+                        10
+                    )
+                    
+                    nueva_cuota = Cuota(
+                        id_prestamo=nuevo_prestamo.id_prestamo,
+                        numero_cuota=i + 1,
+                        fecha_vencimiento=fecha_vencimiento,
+                        monto=monto_cuota,
+                        estado='PENDIENTE'
+                    )
+                    db.session.add(nueva_cuota)
+            
             db.session.commit()
             flash('Cliente registrado exitosamente', 'success')
-            return redirect(url_for('registro'))
-
+            return redirect(url_for('clientes'))
+            
         except Exception as e:
             db.session.rollback()
+            app.logger.error(f'Error en registro: {str(e)}')
             flash(f'Error al procesar la solicitud: {str(e)}', 'error')
-            return render_template('registro.html', form_data=form_data, errors=errors)
-
-    return render_template('registro.html', form_data={}, errors={})
+            return render_template('registro.html', form_data=form_data, errors=errors, active_page='clientes')
+    
+    return render_template('registro.html', form_data={}, errors={}, active_page='clientes')
 
 
 @app.route('/reportes')
@@ -204,7 +223,8 @@ def reportes():
                          prestamos=prestamos,
                          mes_actual=mes_actual_str,
                          total_adeudado=total_adeudado,
-                         adeudado_mes_actual=adeudado_mes_actual)
+                         adeudado_mes_actual=adeudado_mes_actual,
+                         active_page='reportes')
 
 
 @app.route('/cuotas_a_vencer')
@@ -232,7 +252,8 @@ def cuotas_a_vencer():
                          cuotas=cuotas,
                          today=today,
                          mes_actual=today.strftime('%B %Y'),
-                         total_a_cobrar=total_a_cobrar)
+                         total_a_cobrar=total_a_cobrar,
+                         active_page='cuotas')
 
 
 @app.route('/cliente/<int:id>')
@@ -411,7 +432,7 @@ def prestamos():
         db.joinedload(Cliente.prestamos).joinedload(Prestamo.cuotas)
     ).order_by(Cliente.apellido).all()
     
-    return render_template('prestamos.html', clientes=clientes)
+    return render_template('prestamos.html', clientes=clientes, active_page='prestamos')
 
 
 @app.route('/crear_prestamo', methods=['POST'])
@@ -742,7 +763,8 @@ def consultar_bcra():
     return render_template('consulta_bcra.html', 
                          resultado=resultado, 
                          resultado_cheques=resultado_cheques, 
-                         error=error)
+                         error=error,
+                         active_page='bcra')
 
 
 @app.route('/prestamos_otorgados', methods=['GET'])
@@ -752,7 +774,7 @@ def prestamos_otorgados():
 
 @app.route('/buscar_clientes')
 def buscar_clientes():
-    return render_template('buscar_clientes.html')
+    return render_template('buscar_clientes.html', active_page='cargar_prestamos')
 
 @app.route('/api/buscar_clientes')
 def api_buscar_clientes():
@@ -867,6 +889,42 @@ def guardar_prestamo():
         db.session.rollback()
         flash(f'Error al registrar el préstamo: {str(e)}', 'error')
         return redirect(url_for('cargar_prestamo', id_cliente=request.form['id_cliente']))
+
+
+@app.route('/eliminar_cliente/<int:id>', methods=['POST'])
+def eliminar_cliente(id):
+    app.logger.info(f'Iniciando eliminación del cliente {id}')
+    
+    try:
+        cliente = Cliente.query.get_or_404(id)
+        app.logger.info(f'Cliente encontrado: {cliente.nombre} {cliente.apellido}')
+        
+        # Obtener y contar préstamos
+        prestamos = Prestamo.query.filter_by(id_cliente=id).all()
+        app.logger.info(f'Préstamos encontrados: {len(prestamos)}')
+        
+        # Para cada préstamo, eliminar sus cuotas
+        for prestamo in prestamos:
+            cuotas = Cuota.query.filter_by(id_prestamo=prestamo.id_prestamo).all()
+            app.logger.info(f'Cuotas encontradas para préstamo {prestamo.id_prestamo}: {len(cuotas)}')
+            Cuota.query.filter_by(id_prestamo=prestamo.id_prestamo).delete()
+        
+        # Eliminar préstamos
+        Prestamo.query.filter_by(id_cliente=id).delete()
+        
+        # Eliminar cliente
+        db.session.delete(cliente)
+        db.session.commit()
+        
+        app.logger.info('Eliminación completada exitosamente')
+        flash(f'Cliente {cliente.nombre} {cliente.apellido} y todos sus datos relacionados han sido eliminados correctamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f'Error durante la eliminación: {str(e)}')
+        flash(f'Error al eliminar el cliente: {str(e)}', 'error')
+        
+    return redirect(url_for('clientes'))
 
 if __name__ == '__main__':
     app.run(debug=True)

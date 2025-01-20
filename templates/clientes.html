@@ -51,6 +51,11 @@
                                     class="btn btn-sm btn-warning text-white">
                                     <i class="fas fa-edit"></i>
                                 </a>
+                                <button
+                                    onclick="confirmarEliminacion({{ cliente.id_cliente }}, '{{ cliente.nombre }} {{ cliente.apellido }}')"
+                                    class="btn btn-sm btn-danger text-white">
+                                    <i class="fas fa-trash"></i>
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -60,4 +65,63 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true"
+    style="display: none;">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmModalLabel">Confirmar eliminación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Está seguro que desea eliminar al cliente <span id="clienteNombre"></span>?</p>
+                <p class="text-danger">
+                    <strong>¡Atención!</strong> Esta acción eliminará:
+                <ul>
+                    <li>Todos los préstamos del cliente</li>
+                    <li>Todas las cuotas de cada préstamo</li>
+                    <li>Los datos del cliente</li>
+                </ul>
+                Esta acción no se puede deshacer.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function confirmarEliminacion(id, nombre) {
+        console.log('Iniciando eliminación para cliente:', id, nombre);
+
+        // Verificar que los elementos existen
+        const modalElement = document.getElementById('confirmModal');
+        const nombreElement = document.getElementById('clienteNombre');
+        const formElement = document.getElementById('deleteForm');
+
+        if (!modalElement || !nombreElement || !formElement) {
+            console.error('No se encontraron todos los elementos necesarios:', {
+                modal: !!modalElement,
+                nombre: !!nombreElement,
+                form: !!formElement
+            });
+            return;
+        }
+
+        // Configurar el modal
+        nombreElement.textContent = nombre;
+        formElement.action = `/eliminar_cliente/${id}`;
+        console.log('Form action configurada:', formElement.action);
+
+        // Mostrar el modal
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+    }
+</script>
 {% endblock %}

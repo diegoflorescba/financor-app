@@ -173,10 +173,10 @@
         tbody.innerHTML = ''; // Limpiar tabla existente
 
         for (let i = 1; i <= cuotasTotales; i++) {
-            // Calcular fecha de vencimiento (día 13 de cada mes)
-            const fechaVencimiento = new Date(fechaInicio.getFullYear(), fechaInicio.getMonth() + i, 13);
+            // Calcular fecha de vencimiento (día 10 de cada mes)
+            const fechaVencimiento = new Date(fechaInicio.getFullYear(), fechaInicio.getMonth() + i, 10);
 
-            // Determinar si la cuota está vencida (comparar solo fechas, sin horas)
+            // Determinar si la cuota está vencida
             const fechaHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
             const estaPagada = fechaVencimiento < fechaHoy;
             const estado = estaPagada ? 'PAGADA' : 'PENDIENTE';

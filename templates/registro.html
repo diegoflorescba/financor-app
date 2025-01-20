@@ -1,142 +1,296 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="container">
-    <h1>Registro de Cliente y Préstamo</h1>
+<div class="container mt-5">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h3 class="card-title mb-4">Registro de Cliente</h3>
 
-    <form method="POST" action="{{ url_for('registro') }}">
-        <h2>Datos del Cliente</h2>
-        <div class="form-group">
-            <label for="nombre">Nombre:</label>
-            <input type="text" id="nombre" name="nombre" value="{{ form_data.get('nombre', '') }}" required>
-        </div>
-
-        <div class="form-group">
-            <label for="apellido">Apellido:</label>
-            <input type="text" id="apellido" name="apellido" value="{{ form_data.get('apellido', '') }}" required>
-        </div>
-
-        <div class="form-group {% if 'dni' in errors %}error{% endif %}">
-            <label for="dni">DNI:</label>
-            <input type="text" id="dni" name="dni" value="{{ form_data.get('dni', '') }}" required>
-            {% if 'dni' in errors %}
-            <span class="error-message">{{ errors['dni'] }}</span>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
             {% endif %}
+            {% endwith %}
+
+            <form method="POST" class="needs-validation" novalidate>
+                <!-- Datos del Cliente -->
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="nombre" class="form-label mb-0">Nombre *</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" class="form-control" id="nombre" name="nombre" required>
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="apellido" class="form-label mb-0">Apellido *</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" class="form-control" id="apellido" name="apellido" required>
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="dni" class="form-label mb-0">DNI *</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" class="form-control" id="dni" name="dni" required maxlength="8">
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="telefono" class="form-label mb-0">Teléfono</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="tel" class="form-control" id="telefono" name="telefono">
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="correo_electronico" class="form-label mb-0">Correo Electrónico</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="email" class="form-control" id="correo_electronico"
+                                    name="correo_electronico">
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="direccion" class="form-label mb-0">Dirección</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" class="form-control direccion" id="direccion" name="direccion">
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="documentacion_verificada" class="form-label mb-0">
+                                    Documentación Verificada
+                                </label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="checkbox" class="form-check-input" id="documentacion_verificada"
+                                    name="documentacion_verificada">
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="tiene_prestamo" class="form-label mb-0">
+                                    Incluir Préstamo
+                                </label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="checkbox" class="form-check-input" id="tiene_prestamo"
+                                    name="tiene_prestamo">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Datos del Préstamo (inicialmente oculto) -->
+                <div id="seccion_prestamo" class="row g-3 mt-4" style="display: none;">
+                    <h4>Datos del Préstamo</h4>
+
+                    <div class="col-md-4">
+                        <label for="monto_prestado" class="form-label">Monto del Préstamo *</label>
+                        <input type="number" class="form-control" id="monto_prestado" name="monto_prestado" step="0.01">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="tasa_interes" class="form-label">Tasa de Interés (%) *</label>
+                        <input type="number" class="form-control" id="tasa_interes" name="tasa_interes" step="0.01">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="cuotas_totales" class="form-label">Cantidad de Cuotas *</label>
+                        <input type="number" class="form-control" id="cuotas_totales" name="cuotas_totales">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="monto_cuotas" class="form-label">Monto por Cuota *</label>
+                        <input type="number" class="form-control" id="monto_cuotas" name="monto_cuotas" step="0.01">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="monto_adeudado" class="form-label">Monto Total</label>
+                        <input type="number" class="form-control" id="monto_adeudado" name="monto_adeudado" readonly>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="fecha_inicio" class="form-label">Fecha de Inicio *</label>
+                        <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio">
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="fecha_finalizacion" class="form-label">Fecha de Finalización</label>
+                        <input type="date" class="form-control" id="fecha_finalizacion" name="fecha_finalizacion"
+                            readonly>
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                    <a href="{{ url_for('clientes') }}" class="btn btn-danger">Cancelar</a>
+                </div>
+            </form>
         </div>
-
-        <div class="form-group">
-            <label for="direccion">Dirección:</label>
-            <input type="text" id="direccion" name="direccion" value="{{ form_data.get('direccion', '') }}">
-        </div>
-
-        <div class="form-group">
-            <label for="telefono">Teléfono:</label>
-            <input type="tel" id="telefono" name="telefono" value="{{ form_data.get('telefono', '') }}">
-        </div>
-
-        <div class="form-group {% if 'correo_electronico' in errors %}error{% endif %}">
-            <label for="correo_electronico">Correo Electrónico:</label>
-            <input type="email" id="correo_electronico" name="correo_electronico"
-                value="{{ form_data.get('correo_electronico', '') }}">
-            {% if 'correo_electronico' in errors %}
-            <span class="error-message">{{ errors['correo_electronico'] }}</span>
-            {% endif %}
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" name="documentacion_verificada" {% if form_data.get('documentacion_verificada')
-                    %}checked{% endif %}>
-                Documentación Verificada
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" name="tiene_prestamo" id="tiene_prestamo">
-                ¿Incluir Préstamo?
-            </label>
-        </div>
-
-        <div id="prestamo_fields" style="display: none;">
-            <h2>Datos del Préstamo</h2>
-            <div class="form-group">
-                <label for="monto">Monto:</label>
-                <input type="number" step="0.01" id="monto" name="monto" class="calc-input">
-            </div>
-
-            <div class="form-group">
-                <label for="interes">Interés (%):</label>
-                <input type="number" step="0.01" id="interes" name="interes" class="calc-input">
-            </div>
-
-            <div class="form-group">
-                <label for="cuotas_totales">Cuotas Totales:</label>
-                <input type="number" id="cuotas_totales" name="cuotas_totales" class="calc-input">
-            </div>
-
-            <div class="form-group">
-                <label for="cuotas_pendientes">Cuotas Pendientes:</label>
-                <input type="number" id="cuotas_pendientes" name="cuotas_pendientes" class="calc-input">
-            </div>
-
-            <div class="form-group">
-                <label for="monto_cuotas">Monto por Cuota:</label>
-                <input type="number" step="0.01" id="monto_cuotas" name="monto_cuotas" readonly>
-            </div>
-
-            <div class="form-group">
-                <label for="monto_adeudado">Monto Adeudado:</label>
-                <input type="number" step="0.01" id="monto_adeudado" name="monto_adeudado" readonly>
-            </div>
-
-            <div class="form-group">
-                <label for="fecha_inicio">Fecha de Inicio:</label>
-                <input type="date" id="fecha_inicio" name="fecha_inicio" required>
-            </div>
-
-            <div class="form-group">
-                <label for="fecha_finalizacion">Fecha de Finalización:</label>
-                <input type="date" id="fecha_finalizacion" name="fecha_finalizacion" readonly>
-            </div>
-        </div>
-
-        <button type="submit" class="dashboard-button primary">
-            <i class="fas fa-save"></i> Registrar
-        </button>
-    </form>
+    </div>
 </div>
+
+<style>
+    .card {
+        border: none;
+        border-radius: 10px;
+    }
+
+    .form-label {
+        color: #374151;
+        font-weight: 500;
+    }
+
+    .row.align-items-center {
+        min-height: 38px;
+    }
+
+    .form-control {
+        border-radius: 6px;
+        border: 1px solid #D1D5DB;
+        padding: 0.5rem 0.75rem;
+        height: 30px;
+        max-width: 600px;
+    }
+
+    .form-control:focus {
+        border-color: #3B82F6;
+        box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+    }
+
+    .btn {
+        padding: 0.5rem 1.5rem;
+        height: 38px;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .btn-primary {
+        background-color: #3B82F6;
+        border-color: #3B82F6;
+    }
+
+    .btn-primary:hover {
+        background-color: #2563EB;
+        border-color: #2563EB;
+    }
+
+    .btn-secondary {
+        background-color: #6B7280;
+        border-color: #6B7280;
+    }
+
+    .form-check-input:checked {
+        background-color: #3B82F6;
+        border-color: #3B82F6;
+    }
+
+    input[type="number"] {
+        max-width: 300px;
+    }
+
+    input[type="date"] {
+        max-width: 350px;
+    }
+
+    input[type="email"],
+    input[type="text"].direccion {
+        max-width: 700px;
+    }
+
+    .col-form-label {
+        padding-top: calc(0.375rem + 1px);
+        padding-bottom: calc(0.375rem + 1px);
+        margin-bottom: 0;
+        font-size: inherit;
+        line-height: 1.5;
+    }
+
+    .row.align-items-center {
+        margin-bottom: 1rem;
+    }
+
+    .form-label {
+        color: #374151;
+        font-weight: 500;
+        margin-bottom: 0.25rem;
+    }
+
+    .section-divider {
+        margin: 2rem 0;
+        border-top: 1px solid #E5E7EB;
+    }
+
+    .btn-danger {
+        background-color: #DC2626;
+        border-color: #DC2626;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background-color: #B91C1C;
+        border-color: #B91C1C;
+    }
+
+    .d-flex.gap-2 {
+        gap: 0.75rem !important;
+    }
+</style>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Mostrar/ocultar campos de préstamo
-        document.getElementById('tiene_prestamo').addEventListener('change', function () {
-            document.getElementById('prestamo_fields').style.display =
-                this.checked ? 'block' : 'none';
-        });
+        const tienePrestamo = document.getElementById('tiene_prestamo');
+        const seccionPrestamo = document.getElementById('seccion_prestamo');
 
-        // Función para calcular montos
-        function calcularMontos() {
-            const monto = parseFloat(document.getElementById('monto').value) || 0;
-            const interes = parseFloat(document.getElementById('interes').value) || 0;
-            const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
-            const cuotasPendientes = parseInt(document.getElementById('cuotas_pendientes').value) || 0;
+        // Mostrar/ocultar sección de préstamo
+        function togglePrestamo() {
+            seccionPrestamo.style.display = tienePrestamo.checked ? 'block' : 'none';
 
-            if (monto && interes && cuotasTotales) {
-                // Calcular monto total con interés
-                const montoTotal = monto * (1 + (interes / 100));
+            // Habilitar/deshabilitar campos requeridos
+            const camposRequeridos = seccionPrestamo.querySelectorAll('input:not([readonly])');
+            camposRequeridos.forEach(campo => {
+                campo.required = tienePrestamo.checked;
+            });
+        }
 
-                // Calcular monto por cuota
-                const montoCuota = montoTotal / cuotasTotales;
-                document.getElementById('monto_cuotas').value = montoCuota.toFixed(2);
+        // Inicializar estado
+        togglePrestamo();
+        tienePrestamo.addEventListener('change', togglePrestamo);
 
-                // Calcular monto adeudado
-                if (cuotasPendientes) {
-                    const montoAdeudado = montoCuota * cuotasPendientes;
-                    document.getElementById('monto_adeudado').value = montoAdeudado.toFixed(2);
-                }
+        // Calcular monto total automáticamente
+        function calcularMontoTotal() {
+            const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+            const cuotas = parseInt(document.getElementById('cuotas_totales').value) || 0;
+
+            if (montoCuota && cuotas) {
+                const montoTotal = montoCuota * cuotas;
+                document.getElementById('monto_adeudado').value = montoTotal.toFixed(2);
             }
         }
+
+        // Agregar listeners para el cálculo automático
+        document.getElementById('monto_cuotas').addEventListener('input', calcularMontoTotal);
+        document.getElementById('cuotas_totales').addEventListener('input', calcularMontoTotal);
 
         // Función para calcular fecha de finalización
         function calcularFechaFinalizacion() {
@@ -144,114 +298,34 @@
             const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
 
             if (fechaInicio && cuotasTotales) {
-                // Crear objeto Date con la fecha de inicio
                 let fecha = new Date(fechaInicio);
-
-                // Agregar los meses correspondientes a las cuotas
+                // Agregar los meses de las cuotas
                 fecha.setMonth(fecha.getMonth() + cuotasTotales);
+                // Ajustar al día 10 del mes
+                fecha.setDate(10);
 
-                // Formatear la fecha para el input type="date"
-                const fechaFin = fecha.toISOString().split('T')[0];
-                document.getElementById('fecha_finalizacion').value = fechaFin;
+                // Formatear fecha para el input
+                const year = fecha.getFullYear();
+                const month = String(fecha.getMonth() + 1).padStart(2, '0');
+                const day = '10';
+
+                document.getElementById('fecha_finalizacion').value = `${year}-${month}-${day}`;
             }
         }
 
-        // Agregar evento a todos los campos de entrada que afectan el cálculo de montos
-        document.querySelectorAll('.calc-input').forEach(input => {
-            input.addEventListener('input', calcularMontos);
-        });
-
-        // Agregar eventos para calcular fecha de finalización
+        // Agregar listeners para el cálculo de fecha
         document.getElementById('fecha_inicio').addEventListener('change', calcularFechaFinalizacion);
         document.getElementById('cuotas_totales').addEventListener('input', calcularFechaFinalizacion);
 
-        // Validar que cuotas pendientes no sea mayor que cuotas totales
-        document.getElementById('cuotas_pendientes').addEventListener('input', function () {
-            const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
-            const cuotasPendientes = parseInt(this.value) || 0;
+        // Establecer fecha de inicio por defecto
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        document.getElementById('fecha_inicio').value = `${year}-${month}-${day}`;
 
-            if (cuotasPendientes > cuotasTotales) {
-                alert('Las cuotas pendientes no pueden ser mayores que las cuotas totales');
-                this.value = cuotasTotales;
-            }
-            calcularMontos();
-        });
+        // Calcular fecha de finalización inicial
+        calcularFechaFinalizacion();
     });
 </script>
-
-<style>
-    input[readonly] {
-        background-color: #f5f5f5;
-        cursor: not-allowed;
-    }
-
-    .form-group {
-        margin-bottom: 15px;
-    }
-
-    .form-group label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: bold;
-    }
-
-    .form-group input {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-    }
-
-    .form-group input[readonly] {
-        border: 1px solid #eee;
-    }
-
-    input[type="date"] {
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        width: 100%;
-    }
-
-    input[type="date"][readonly] {
-        background-color: #f5f5f5;
-        cursor: not-allowed;
-    }
-
-    /* Mejora visual para campos requeridos */
-    input:required {
-        border-left: 3px solid #2196F3;
-    }
-
-    /* Indicador visual cuando un campo calculado se actualiza */
-    @keyframes highlight {
-        0% {
-            background-color: #fff3e0;
-        }
-
-        100% {
-            background-color: #f5f5f5;
-        }
-    }
-
-    .calculated {
-        animation: highlight 1s ease-out;
-    }
-
-    .form-group.error input {
-        border-color: #dc3545;
-        background-color: #fff8f8;
-    }
-
-    .error-message {
-        color: #dc3545;
-        font-size: 0.875em;
-        margin-top: 0.25rem;
-        display: block;
-    }
-
-    .form-group.error label {
-        color: #dc3545;
-    }
-</style>
 {% endblock %}
