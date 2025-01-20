@@ -1,12 +1,11 @@
 from datetime import datetime
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import os
 import shutil
 
-# Si modificas estos scopes, elimina el archivo token.json
+# Definir los scopes necesarios
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 def backup_database():
@@ -19,25 +18,16 @@ def backup_database():
         # Crear una copia de la base de datos
         shutil.copy2(db_original, db_backup)
         
-        # Autenticación con Google Drive
-        creds = None
-        if os.path.exists('./instance/token.json'):
-            creds = Credentials.from_authorized_user_file('./instance/token.json', SCOPES)
-            
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    './instance/credentials.json', SCOPES)
-                creds = flow.run_local_server(port=0)
-            with open('./instance/token.json', 'w') as token:
-                token.write(creds.to_json())
+        # Cargar credenciales desde el archivo de cuenta de servicio
+        creds = Credentials.from_service_account_file(
+            './instance/service-account.json',
+            scopes=SCOPES
+        )
 
         # Crear el servicio de Drive
         service = build('drive', 'v3', credentials=creds)
         
-        # Carpeta en Drive donde se guardarán los backups (reemplazar con tu ID de carpeta)
+        # ID de la carpeta en Drive donde se guardarán los backups
         folder_id = '1ry8RAwDuE81Ygp-cVTcdNnE9Dn9NcaBB'
         
         # Metadata del archivo

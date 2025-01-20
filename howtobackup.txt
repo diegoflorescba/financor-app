@@ -48,3 +48,48 @@ Crea una nueva carpeta llamada "Backups DB"
 Abre la carpeta
 El ID está en la URL: https://drive.google.com/drive/folders/ESTE-ES-EL-ID
 Copia ese ID y reemplázalo en el script en la línea:
+
+Ve a la Google Cloud Console: https://console.cloud.google.com
+Selecciona tu proyecto o crea uno nuevo
+En la barra superior, haz clic donde dice "Seleccionar proyecto"
+Si no tienes uno, haz clic en "Nuevo proyecto"
+Habilita la API de Google Drive:
+En el menú lateral, ve a "APIs y servicios" > "Biblioteca"
+Busca "Google Drive API"
+Haz clic en "Habilitar"
+Crear la cuenta de servicio:
+En el menú lateral, ve a "APIs y servicios" > "Credenciales"
+En la parte superior, haz clic en "+ CREAR CREDENCIALES"
+Selecciona "Cuenta de servicio"
+Configura la cuenta de servicio:
+Nombre: "backup-database" (o el nombre que prefieras)
+ID: se generará automáticamente
+Descripción: "Cuenta para backup automático de base de datos"
+Haz clic en "Crear y continuar"
+Asigna el rol:
+Rol: "Editor" (o un rol más restrictivo si lo prefieres)
+Haz clic en "Continuar"
+Haz clic en "Listo"
+Descargar la clave JSON:
+En la lista de cuentas de servicio, haz clic en la que acabas de crear
+Ve a la pestaña "CLAVES"
+Haz clic en "AGREGAR CLAVE" > "Crear nueva clave"
+Selecciona "JSON"
+Haz clic en "CREAR"
+El archivo JSON se descargará automáticamente
+Renómbralo a service-account.json
+Muévelo a la carpeta instance/ de tu proyecto
+Para compartir la carpeta de Drive con la cuenta de servicio:
+Ve a Google Drive
+Busca o crea la carpeta donde quieres que se guarden los backups
+Haz clic derecho en la carpeta
+Selecciona "Compartir"
+En el campo de email, pega el client_email que aparece en tu JSON, que sería:
+financor-db@financor-app-447322.iam.gserviceaccount.com
+Dale permisos de "Editor"
+Asegúrate de desmarcar la opción de "Notificar a las personas"
+Haz clic en "Compartir" o "Listo"
+Después de compartir la carpeta, necesitas su ID para ponerlo en el script. Para obtener el ID de la carpeta:
+Abre la carpeta en Drive
+Copia el ID de la URL (es la parte larga después de /folders/)
+Reemplaza ese ID en el script donde dice folder_id
