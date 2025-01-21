@@ -2,3 +2,5 @@ instance/credentials.json
 instance/token.json
 *.loginstance/token.json
 instance/credentials.json
+instance/*
+venv/
