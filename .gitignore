@@ -4,3 +4,4 @@ instance/token.json
 instance/credentials.json
 instance/*
 venv/
+__pycache__/
