@@ -8,7 +8,7 @@
     <div class="card shadow-sm mb-4">
         <div class="card-body">
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="financial-summary">
                         <h3 class="text-primary">
                             <i class="fas fa-dollar-sign"></i> Total Adeudado General
@@ -18,13 +18,23 @@
                         </p>
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="financial-summary">
                         <h3 class="text-primary">
                             <i class="fas fa-calendar-alt"></i> Adeudado {{ mes_actual }}
                         </h3>
                         <p class="h2 text-warning">
                             ${{ "{:,.2f}".format(adeudado_mes_actual).replace(',', '.') }}
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="financial-summary">
+                        <h3 class="text-primary">
+                            <i class="fas fa-calendar-plus"></i> A Cobrar {{ mes_siguiente }}
+                        </h3>
+                        <p class="h2 text-info">
+                            ${{ "{:,.2f}".format(adeudado_mes_siguiente).replace(',', '.') }}
                         </p>
                     </div>
                 </div>

@@ -196,6 +196,14 @@ def reportes():
     # Configurar el locale en español
     locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
     
+    # Obtener fecha actual y siguiente
+    fecha_actual = datetime.now()
+    fecha_siguiente = fecha_actual + relativedelta(months=1)
+    
+    # Formatear nombres de meses
+    mes_actual = fecha_actual.strftime('%B %Y').capitalize()
+    mes_siguiente = fecha_siguiente.strftime('%B %Y').capitalize()
+    
     # Obtener todos los préstamos activos
     prestamos = Prestamo.query.filter(
         Prestamo.estado == 'ACTIVO',
@@ -205,35 +213,73 @@ def reportes():
     # Calcular el total adeudado general
     total_adeudado = sum(prestamo.monto_adeudado for prestamo in prestamos)
     
-    # Obtener el mes actual
-    mes_actual = datetime.now()
-    
-    # Calcular el adeudado del mes actual (cuotas pendientes de este mes)
+    # Calcular el adeudado del mes actual
     adeudado_mes_actual = db.session.query(db.func.sum(Cuota.monto))\
         .join(Prestamo)\
         .filter(
             Prestamo.estado == 'ACTIVO',
-            Cuota.estado == 'PENDIENTE',
-            db.extract('month', Cuota.fecha_vencimiento) == mes_actual.month,
-            db.extract('year', Cuota.fecha_vencimiento) == mes_actual.year
+            Cuota.pagada == False,
+            db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
+            db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
         ).scalar() or 0.0
     
-    # Formatear la fecha en español
-    mes_actual_str = mes_actual.strftime('%B %Y').capitalize()
+    # Calcular el adeudado del mes siguiente
+    adeudado_mes_siguiente = db.session.query(db.func.sum(Cuota.monto))\
+        .join(Prestamo)\
+        .filter(
+            Prestamo.estado == 'ACTIVO',
+            Cuota.pagada == False,
+            db.extract('month', Cuota.fecha_vencimiento) == fecha_siguiente.month,
+            db.extract('year', Cuota.fecha_vencimiento) == fecha_siguiente.year
+        ).scalar() or 0.0
+
+    # Obtener cuotas para la tabla
+    query = Cuota.query.join(Prestamo).join(Cliente).filter(
+        Prestamo.estado == 'ACTIVO',
+        Cuota.pagada == False
+    )
+
+    # Si estamos después del día 10, incluir cuotas del mes siguiente
+    if fecha_actual.day > 10:
+        query = query.filter(
+            db.or_(
+                db.and_(
+                    db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
+                    db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
+                ),
+                db.and_(
+                    db.extract('month', Cuota.fecha_vencimiento) == fecha_siguiente.month,
+                    db.extract('year', Cuota.fecha_vencimiento) == fecha_siguiente.year
+                )
+            )
+        )
+    else:
+        query = query.filter(
+            db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
+            db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
+        )
+
+    cuotas = query.order_by(Cliente.apellido, Cliente.nombre, Cuota.fecha_vencimiento).all()
     
     return render_template('reportes.html',
                          prestamos=prestamos,
-                         mes_actual=mes_actual_str,
+                         cuotas=cuotas,
+                         mes_actual=mes_actual,
+                         mes_siguiente=mes_siguiente,
                          total_adeudado=total_adeudado,
                          adeudado_mes_actual=adeudado_mes_actual,
+                         adeudado_mes_siguiente=adeudado_mes_siguiente,
                          active_page='reportes')
 
 
 @app.route('/cuotas_a_vencer')
 def cuotas_a_vencer():
+    # Configurar el locale en español
+    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+    
     today = date.today()
-    # Obtener el último día del mes actual
-    _, ultimo_dia = monthrange(today.year, today.month)
+    # Capitalizar la primera letra del mes
+    mes_actual = today.strftime('%B %Y').capitalize()
     
     # Filtrar cuotas:
     # - Del mes actual
@@ -252,10 +298,9 @@ def cuotas_a_vencer():
 
     return render_template('cuotas_a_vencer.html',
                          cuotas=cuotas,
-                         today=today,
-                         mes_actual=today.strftime('%B %Y'),
                          total_a_cobrar=total_a_cobrar,
-                         active_page='cuotas')
+                         today=today,
+                         mes_actual=mes_actual)
 
 
 @app.route('/cliente/<int:id>')
@@ -1018,3 +1063,4 @@ def cleanup_db():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
