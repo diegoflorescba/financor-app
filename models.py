@@ -31,7 +31,7 @@ class Prestamo(db.Model):
 
     id_prestamo = db.Column(db.Integer, primary_key=True)
     fecha_inicio = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    fecha_vencimiento = db.Column(db.DateTime, nullable=False)
+    fecha_finalizacion = db.Column(db.DateTime, nullable=False)
     monto_prestado = db.Column(db.Float, nullable=False)
     tasa_interes = db.Column(db.Float, nullable=False)
     cuotas_totales = db.Column(db.Integer, nullable=False)

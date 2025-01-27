@@ -1,124 +1,133 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
-    <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-md p-6">
-        <h1 class="text-2xl font-bold mb-6">Nuevo Préstamo para {{ cliente.nombre }} {{ cliente.apellido }}</h1>
+<div class="flex justify-center min-h-screen bg-gray-50">
+    <div class="container max-w-2xl px-4 py-8">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h1 class="text-xl font-bold mb-6 text-gray-800 text-center">
+                Nuevo Préstamo para {{ cliente.nombre }} {{ cliente.apellido }}
+            </h1>
 
-        <form id="prestamo-form" method="POST" action="{{ url_for('guardar_prestamo') }}" class="space-y-6">
-            <input type="hidden" name="id_cliente" value="{{ cliente.id_cliente }}">
+            <form id="prestamo-form" method="POST" action="{{ url_for('guardar_prestamo') }}" class="space-y-4">
+                <input type="hidden" name="id_cliente" value="{{ cliente.id_cliente }}">
 
-            <div class="grid grid-cols-2 gap-6">
-                <!-- Monto Prestado -->
-                <div class="form-group">
-                    <label for="monto_prestado" class="block text-sm font-medium text-gray-700 mb-1">
-                        Monto Prestado
-                    </label>
-                    <div class="relative">
-                        <span class="absolute left-3 top-2 text-gray-500">$</span>
+                <div class="flex flex-col items-center gap-4">
+                    <!-- Monto Prestado -->
+                    <div class="form-group w-64">
+                        <label for="monto_prestado" class="block text-sm font-medium text-gray-700 mb-1">Monto
+                            Prestado</label>
                         <input type="number" id="monto_prestado" name="monto_prestado"
-                            class="pl-8 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-1"
-                            required step="0.01" onchange="calcularMontos()">
+                            class="w-full h-8 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm"
+                            required step="0.01">
                     </div>
-                </div>
 
-                <!-- Tasa de Interés -->
-                <div class="form-group">
-                    <label for="tasa_interes" class="block text-sm font-medium text-gray-700 mb-1">
-                        Tasa de Interés Anual
-                    </label>
-                    <div class="relative">
+                    <!-- Tasa de Interés -->
+                    <div class="form-group w-64">
+                        <label for="tasa_interes" class="block text-sm font-medium text-gray-700 mb-1">Tasa de
+                            Interés</label>
                         <input type="number" id="tasa_interes" name="tasa_interes"
-                            class="pr-8 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-1"
-                            required step="0.01" onchange="calcularMontos()">
-                        <span class="absolute right-3 top-2 text-gray-500">%</span>
+                            class="w-full h-8 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm"
+                            required step="0.01">
+                    </div>
+
+                    <!-- Cantidad de Cuotas -->
+                    <div class="form-group w-64">
+                        <label for="cuotas_totales" class="block text-sm font-medium text-gray-700 mb-1">Cantidad de
+                            Cuotas</label>
+                        <input type="number" id="cuotas_totales" name="cuotas_totales"
+                            class="w-full h-8 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm"
+                            required min="1">
+                    </div>
+
+                    <!-- Monto por Cuota -->
+                    <div class="form-group w-64">
+                        <label for="monto_cuotas" class="block text-sm font-medium text-gray-700 mb-1">Monto por
+                            Cuota</label>
+                        <input type="number" id="monto_cuotas" name="monto_cuotas"
+                            class="w-full h-8 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm"
+                            required step="0.01">
+                    </div>
+
+                    <!-- Monto Total -->
+                    <div class="form-group w-64">
+                        <label for="monto_adeudado" class="block text-sm font-medium text-gray-700 mb-1">Monto
+                            Total</label>
+                        <input type="text" id="monto_adeudado" name="monto_adeudado"
+                            class="w-full h-8 rounded-md bg-gray-50 border-gray-300 shadow-sm text-sm" readonly>
+                    </div>
+
+                    <!-- Fecha de Inicio -->
+                    <div class="form-group w-64">
+                        <label for="fecha_inicio" class="block text-sm font-medium text-gray-700 mb-1">Fecha de
+                            Inicio</label>
+                        <input type="date" id="fecha_inicio" name="fecha_inicio"
+                            class="w-full h-8 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm"
+                            required>
+                    </div>
+
+                    <!-- Fecha de Vencimiento -->
+                    <div class="form-group w-64">
+                        <label for="fecha_finalizacion" class="block text-sm font-medium text-gray-700 mb-1">Fecha de
+                            Vencimiento</label>
+                        <input type="text" id="fecha_finalizacion" name="fecha_finalizacion"
+                            class="w-full h-8 rounded-md bg-gray-50 border-gray-300 shadow-sm text-sm" readonly>
                     </div>
                 </div>
 
-                <!-- Cantidad de Cuotas -->
-                <div class="form-group">
-                    <label for="cuotas_totales" class="block text-sm font-medium text-gray-700 mb-1">
-                        Cantidad de Cuotas
-                    </label>
-                    <input type="number" id="cuotas_totales" name="cuotas_totales"
-                        class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-1"
-                        required min="1" onchange="calcularMontos()">
+                <div class="flex justify-center gap-4 mt-8">
+                    <button type="button" onclick="window.history.back()"
+                        class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 text-sm font-medium transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                        class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 text-sm font-medium transition-colors">
+                        Guardar Préstamo
+                    </button>
                 </div>
+            </form>
+        </div>
 
-                <!-- Fecha de Inicio -->
-                <div class="form-group">
-                    <label for="fecha_inicio" class="block text-sm font-medium text-gray-700 mb-1">
-                        Fecha de Inicio
-                    </label>
-                    <input type="date" id="fecha_inicio" name="fecha_inicio"
-                        class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-1"
-                        required onchange="calcularFechaVencimiento()">
-                </div>
-
-                <!-- Campos calculados (readonly) -->
-                <div class="form-group">
-                    <label for="monto_adeudado" class="block text-sm font-medium text-gray-700 mb-1">
-                        Monto Adeudado
-                    </label>
-                    <input type="text" id="monto_adeudado" name="monto_adeudado"
-                        class="w-full rounded-md bg-gray-50 border-gray-300" readonly>
-                </div>
-
-                <div class="form-group">
-                    <label for="monto_cuotas" class="block text-sm font-medium text-gray-700 mb-1">
-                        Monto por Cuota
-                    </label>
-                    <input type="text" id="monto_cuotas" name="monto_cuotas"
-                        class="w-full rounded-md bg-gray-50 border-gray-300" readonly>
-                </div>
-
-                <div class="form-group">
-                    <label for="fecha_vencimiento" class="block text-sm font-medium text-gray-700 mb-1">
-                        Fecha de Vencimiento
-                    </label>
-                    <input type="text" id="fecha_vencimiento" name="fecha_vencimiento"
-                        class="w-full rounded-md bg-gray-50 border-gray-300" readonly>
-                </div>
+        <!-- Vista Previa de Cuotas -->
+        <div class="bg-white rounded-lg shadow-md mt-8 p-6">
+            <h2 class="text-lg font-semibold mb-4 text-gray-800 text-center">Vista Previa de Cuotas</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">N° Cuota</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha
+                                Vencimiento</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Monto</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cuotas-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Filas generadas dinámicamente -->
+                    </tbody>
+                </table>
             </div>
-
-            <div class="flex justify-end space-x-4 mt-6">
-                <button type="button" onclick="window.history.back()"
-                    class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
-                    Cancelar
-                </button>
-                <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
-                    Guardar Préstamo
-                </button>
-            </div>
-        </form>
+        </div>
     </div>
 </div>
-<div class="mt-8"></div>
-<h2 class="text-xl font-semibold mb-4">Vista Previa de Cuotas</h2>
-<div class="overflow-x-auto">
-    <table id="tabla-cuotas" class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    N° Cuota
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha Vencimiento
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Monto
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                </th>
-            </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200" id="cuotas-body">
-            <!-- Las cuotas se generarán aquí dinámicamente -->
-        </tbody>
-    </table>
-</div>
-</div>
+
+<style>
+    .form-group input {
+        transition: all 0.2s ease-in-out;
+    }
+
+    .form-group input:focus {
+        outline: none;
+        border-color: #4F46E5;
+        box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
+    }
+
+    /* Ajuste para pantallas más pequeñas */
+    @media (max-width: 768px) {
+        .form-group {
+            width: 100% !important;
+        }
+    }
+</style>
 
 <script>
     function calcularMontos() {
@@ -150,7 +159,7 @@
 
             // Formatear fecha para mostrar
             const fechaFormateada = fecha.toISOString().split('T')[0];
-            document.getElementById('fecha_vencimiento').value = fechaFormateada;
+            document.getElementById('fecha_finalizacion').value = fechaFormateada;
         }
     }
 
@@ -161,81 +170,100 @@
         calcularFechaVencimiento();
     });
 
-    function generarCuotas() {
-        const fechaInicio = new Date(document.getElementById('fecha_inicio').value);
+    function generarCuotas(fechaPrimeraCuota) {
         const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
         const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+        const tbody = document.getElementById('cuotas-body');
         const hoy = new Date();
 
-        if (!fechaInicio || !cuotasTotales || !montoCuota) return;
+        if (!fechaPrimeraCuota || !cuotasTotales || !montoCuota) return;
 
-        const tbody = document.getElementById('cuotas-body');
         tbody.innerHTML = ''; // Limpiar tabla existente
 
+        let fechaCuota = new Date(fechaPrimeraCuota);
+
         for (let i = 1; i <= cuotasTotales; i++) {
-            // Calcular fecha de vencimiento (día 10 de cada mes)
-            const fechaVencimiento = new Date(fechaInicio.getFullYear(), fechaInicio.getMonth() + i, 10);
+            const row = document.createElement('tr');
+
+            // Formatear fecha para mostrar
+            const year = fechaCuota.getFullYear();
+            const month = String(fechaCuota.getMonth() + 1).padStart(2, '0');
+            const day = '10';
+            const fechaFormateada = `${year}-${month}-${day}`;
 
             // Determinar si la cuota está vencida
-            const fechaHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-            const estaPagada = fechaVencimiento < fechaHoy;
+            const estaPagada = fechaCuota < hoy;
             const estado = estaPagada ? 'PAGADA' : 'PENDIENTE';
             const claseEstado = estaPagada ? 'text-green-600' : 'text-gray-500';
 
-            const row = document.createElement('tr');
             row.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                ${i}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                ${fechaVencimiento.toISOString().split('T')[0]}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                $${montoCuota.toFixed(2)}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm ${claseEstado}">
-                ${estado}
-            </td>
-        `;
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${i}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${fechaFormateada}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$${montoCuota.toFixed(2)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm ${claseEstado}">${estado}</td>
+            `;
+
             tbody.appendChild(row);
+            fechaCuota.setMonth(fechaCuota.getMonth() + 1); // Avanzar al siguiente mes
         }
     }
 
-    // Asegurarnos de que la tabla se actualice cuando cambie la fecha de inicio
-    document.getElementById('fecha_inicio').addEventListener('change', generarCuotas);
+    // Asegurarnos de que la tabla se actualice cuando cambien los valores relevantes
+    document.getElementById('monto_cuotas').addEventListener('input', () => {
+        calcularMontoTotal();
+        calcularFechaFinalizacion(); // Esto llamará a generarCuotas
+    });
 
-    // También actualizar cuando cambien otros campos relevantes
-    document.getElementById('cuotas_totales').addEventListener('change', generarCuotas);
-    document.getElementById('monto_prestado').addEventListener('change', generarCuotas);
-    document.getElementById('tasa_interes').addEventListener('change', generarCuotas);
+    document.getElementById('cuotas_totales').addEventListener('input', () => {
+        calcularMontoTotal();
+        calcularFechaFinalizacion(); // Esto llamará a generarCuotas
+    });
 
-    // Modificar la función calcularMontos para que también genere las cuotas
-    function calcularMontos() {
-        const montoPrestado = parseFloat(document.getElementById('monto_prestado').value) || 0;
-        const tasaInteres = parseFloat(document.getElementById('tasa_interes').value) || 0;
-        const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 1;
+    document.getElementById('fecha_inicio').addEventListener('change', calcularFechaFinalizacion);
 
-        // Calcular monto adeudado (capital + intereses)
-        const montoAdeudado = montoPrestado * (1 + (tasaInteres / 100));
+    // Calcular monto total cuando cambie el monto de cuota o cantidad de cuotas
+    function calcularMontoTotal() {
+        const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+        const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
 
-        // Calcular monto por cuota
-        const montoCuota = montoAdeudado / cuotasTotales;
-
-        // Actualizar campos
-        document.getElementById('monto_adeudado').value = montoAdeudado.toFixed(2);
-        document.getElementById('monto_cuotas').value = montoCuota.toFixed(2);
-
-        // Recalcular fecha de vencimiento y generar cuotas
-        calcularFechaVencimiento();
-        generarCuotas();
+        if (montoCuota && cuotasTotales) {
+            const montoTotal = montoCuota * cuotasTotales;
+            document.getElementById('monto_adeudado').value = montoTotal.toFixed(2);
+        }
     }
 
-    // Modificar el event listener para que también genere las cuotas iniciales
-    document.addEventListener('DOMContentLoaded', function () {
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('fecha_inicio').value = today;
-        calcularFechaVencimiento();
-        generarCuotas();
-    });
+    // Calcular fecha de vencimiento
+    function calcularFechaFinalizacion() {
+        const fechaInicio = new Date(document.getElementById('fecha_inicio').value);
+        const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
+
+        if (fechaInicio && cuotasTotales) {
+            let fechaPrimeraCuota = new Date(fechaInicio);
+
+            // Si la fecha es después del 10, la primera cuota será el 10 del mes siguiente
+            if (fechaInicio.getDate() > 10) {
+                fechaPrimeraCuota.setMonth(fechaPrimeraCuota.getMonth() + 1);
+            }
+
+            // Ajustar al día 10
+            fechaPrimeraCuota.setDate(10);
+
+            // Calcular fecha de finalización
+            let fechaFin = new Date(fechaPrimeraCuota);
+            fechaFin.setMonth(fechaFin.getMonth() + (cuotasTotales - 1)); // -1 porque la primera cuota ya está incluida
+
+            // Formatear fecha para mostrar
+            const fechaFormateada = fechaFin.toISOString().split('T')[0];
+            document.getElementById('fecha_finalizacion').value = fechaFormateada;
+
+            // Generar vista previa de cuotas
+            generarCuotas(fechaPrimeraCuota);
+        }
+    }
+
+    // Establecer fecha actual por defecto
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('fecha_inicio').value = today;
+    calcularFechaFinalizacion();
 </script>
 {% endblock %}

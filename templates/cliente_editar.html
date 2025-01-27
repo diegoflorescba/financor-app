@@ -1,0 +1,166 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h3 class="card-title mb-4">Editar Cliente</h3>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST" class="needs-validation" novalidate>
+                <!-- Datos del Cliente -->
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="nombre" class="form-label mb-0">Nombre *</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" class="form-control" id="nombre" name="nombre"
+                                    value="{{ cliente.nombre }}" required>
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="apellido" class="form-label mb-0">Apellido *</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" class="form-control" id="apellido" name="apellido"
+                                    value="{{ cliente.apellido }}" required>
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="dni" class="form-label mb-0">DNI *</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" class="form-control" id="dni" name="dni" value="{{ cliente.dni }}"
+                                    required maxlength="8">
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="telefono" class="form-label mb-0">Teléfono</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="tel" class="form-control" id="telefono" name="telefono"
+                                    value="{{ cliente.telefono }}">
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="correo_electronico" class="form-label mb-0">Correo Electrónico</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="email" class="form-control" id="correo_electronico"
+                                    name="correo_electronico" value="{{ cliente.correo_electronico }}">
+                            </div>
+                        </div>
+
+                        <div class="row align-items-center mb-3">
+                            <div class="col-md-3">
+                                <label for="direccion" class="form-label mb-0">Dirección</label>
+                            </div>
+                            <div class="col-md-9">
+                                <input type="text" class="form-control direccion" id="direccion" name="direccion"
+                                    value="{{ cliente.direccion }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-5 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Guardar Cambios
+                    </button>
+                    <a href="{{ url_for('clientes') }}" class="btn btn-danger">
+                        <i class="fas fa-times"></i> Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        border: none;
+        border-radius: 10px;
+    }
+
+    .form-label {
+        color: #374151;
+        font-weight: 500;
+    }
+
+    .row.align-items-center {
+        min-height: 38px;
+    }
+
+    .form-control {
+        border-radius: 6px;
+        border: 1px solid #D1D5DB;
+        padding: 0.5rem 0.75rem;
+        height: 30px;
+        max-width: 600px;
+    }
+
+    .form-control:focus {
+        border-color: #3B82F6;
+        box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+    }
+
+    .btn {
+        padding: 0.5rem 1.5rem;
+        height: 38px;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .btn-primary {
+        background-color: #3B82F6;
+        border-color: #3B82F6;
+    }
+
+    .btn-primary:hover {
+        background-color: #2563EB;
+        border-color: #2563EB;
+    }
+
+    .btn-danger {
+        background-color: #DC2626;
+        border-color: #DC2626;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background-color: #B91C1C;
+        border-color: #B91C1C;
+    }
+
+    .mt-5 {
+        margin-top: 3rem !important;
+    }
+
+    .d-flex.gap-2 {
+        gap: 0.75rem !important;
+    }
+
+    input[type="email"],
+    input[type="text"].direccion {
+        max-width: 700px;
+    }
+</style>
+{% endblock %}

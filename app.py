@@ -8,7 +8,7 @@ import pandas as pd
 import io
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from sqlalchemy import or_
+from sqlalchemy import or_, inspect, text
 import locale
 
 
@@ -97,96 +97,98 @@ def nuevo_cliente():
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
     if request.method == 'POST':
-        form_data = request.form.to_dict()
-        errors = {}
-        
+        print("\n=== DEBUG: Iniciando registro de cliente y préstamo ===")
         try:
-            # Corregir el manejo de checkbox
-            documentacion_verificada = 'documentacion_verificada' in form_data
+            # Verificar si ya existe un cliente con ese DNI
+            dni = request.form['dni']
+            cliente_existente = Cliente.query.filter_by(dni=dni).first()
             
-            # Crear el cliente con el valor correcto del checkbox
-            nuevo_cliente = Cliente(
-                nombre=form_data['nombre'],
-                apellido=form_data['apellido'],
-                dni=form_data['dni'],
-                direccion=form_data.get('direccion', ''),  # Usar get() para campos opcionales
-                telefono=form_data.get('telefono', ''),
-                correo_electronico=form_data.get('correo_electronico', ''),
+            if cliente_existente:
+                flash(f'Ya existe un cliente con el DNI: {dni}', 'danger')
+                return render_template('registro.html')
+
+            # Datos del cliente
+            nombre = request.form['nombre']
+            apellido = request.form['apellido']
+            telefono = request.form.get('telefono', '')
+            correo_electronico = request.form.get('correo_electronico', '')
+            direccion = request.form.get('direccion', '')
+            documentacion_verificada = 'documentacion_verificada' in request.form
+            tiene_prestamo = 'tiene_prestamo' in request.form
+
+            print(f"\nDEBUG: Datos del cliente:")
+            print(f"Nombre: {nombre}")
+            print(f"DNI: {dni}")
+            print(f"¿Tiene préstamo marcado?: {tiene_prestamo}")
+
+            # Crear cliente
+            cliente = Cliente(
+                nombre=nombre,
+                apellido=apellido,
+                dni=dni,
+                telefono=telefono,
+                correo_electronico=correo_electronico,
+                direccion=direccion,
                 documentacion_verificada=documentacion_verificada,
-                fecha_registro=datetime.now()
+                fecha_registro=datetime.now(),
+                activo=True
             )
             
-            # Verificar DNI duplicado (solo si se proporcionó un DNI)
-            if form_data.get('dni'):
-                cliente_existente = Cliente.query.filter_by(dni=form_data['dni']).first()
-                if cliente_existente:
-                    errors['dni'] = 'Ya existe un cliente registrado con este DNI'
-            
-            # Verificar correo electrónico duplicado (solo si se proporcionó un correo)
-            if form_data.get('correo_electronico'):
-                cliente_existente = Cliente.query.filter_by(
-                    correo_electronico=form_data['correo_electronico']
-                ).first()
-                if cliente_existente:
-                    errors['correo_electronico'] = 'Ya existe un cliente con este correo'
-            
-            if errors:
-                return render_template('registro.html', form_data=form_data, errors=errors, active_page='clientes')
-            
-            db.session.add(nuevo_cliente)
+            db.session.add(cliente)
             db.session.flush()  # Para obtener el id_cliente
-            
-            # Si incluye préstamo
-            if 'tiene_prestamo' in form_data:
-                # Crear préstamo
-                nuevo_prestamo = Prestamo(
-                    id_cliente=nuevo_cliente.id_cliente,
-                    monto_prestado=float(form_data['monto_prestado']),
-                    tasa_interes=float(form_data['tasa_interes']),
-                    cuotas_totales=int(form_data['cuotas_totales']),
-                    cuotas_pendientes=int(form_data['cuotas_totales']),
-                    monto_cuotas=float(form_data['monto_cuotas']),
-                    monto_adeudado=float(form_data['monto_adeudado']),
-                    fecha_inicio=datetime.strptime(form_data['fecha_inicio'], '%Y-%m-%d').date(),
-                    fecha_vencimiento=datetime.strptime(form_data['fecha_finalizacion'], '%Y-%m-%d').date()
+            print(f"\nDEBUG: Cliente creado con ID: {cliente.id_cliente}")
+
+            # Si tiene préstamo, procesar los datos del préstamo
+            if tiene_prestamo:
+                print("\nDEBUG: Creando préstamo")
+                prestamo = Prestamo(
+                    id_cliente=cliente.id_cliente,
+                    monto_prestado=float(request.form['monto_prestado']),
+                    tasa_interes=float(request.form['tasa_interes']),
+                    cuotas_totales=int(request.form['cuotas_totales']),
+                    cuotas_pendientes=int(request.form['cuotas_totales']),
+                    monto_cuotas=float(request.form['monto_cuotas']),
+                    fecha_inicio=datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d'),
+                    fecha_finalizacion=datetime.strptime(request.form['fecha_finalizacion'], '%Y-%m-%d'),
+                    monto_adeudado=float(request.form['monto_adeudado']),
+                    estado='ACTIVO'
                 )
-                
-                db.session.add(nuevo_prestamo)
+                db.session.add(prestamo)
                 db.session.flush()  # Para obtener el id_prestamo
-                
-                # Generar cuotas
-                fecha_inicio = datetime.strptime(form_data['fecha_inicio'], '%Y-%m-%d').date()
-                monto_cuota = float(form_data['monto_cuotas'])
-                
-                for i in range(int(form_data['cuotas_totales'])):
-                    # Calcular fecha de vencimiento (día 10 de cada mes)
-                    fecha_vencimiento = fecha_inicio + relativedelta(months=i+1)
-                    fecha_vencimiento = date(
-                        fecha_vencimiento.year,
-                        fecha_vencimiento.month,
-                        10
-                    )
-                    
-                    nueva_cuota = Cuota(
-                        id_prestamo=nuevo_prestamo.id_prestamo,
+
+                print("\nDEBUG: Creando cuotas")
+                # Generar las cuotas
+                fecha_inicio = datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d')
+                fecha_primera_cuota = fecha_inicio.replace(day=10)
+                if fecha_inicio.day > 10:
+                    fecha_primera_cuota = (fecha_primera_cuota + timedelta(days=32)).replace(day=10)
+
+                for i in range(prestamo.cuotas_totales):
+                    fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
+                    cuota = Cuota(
+                        id_prestamo=prestamo.id_prestamo,
                         numero_cuota=i + 1,
+                        monto=prestamo.monto_cuotas,
                         fecha_vencimiento=fecha_vencimiento,
-                        monto=monto_cuota,
-                        estado='PENDIENTE'
+                        pagada=False
                     )
-                    db.session.add(nueva_cuota)
-            
+                    print(f"DEBUG: Creando cuota {i+1} con vencimiento {fecha_vencimiento}")
+                    db.session.add(cuota)
+
+                print("\nDEBUG: Cuotas creadas exitosamente")
+
             db.session.commit()
+            print("\nDEBUG: Commit realizado exitosamente")
             flash('Cliente registrado exitosamente', 'success')
             return redirect(url_for('clientes'))
-            
+
         except Exception as e:
             db.session.rollback()
-            app.logger.error(f'Error en registro: {str(e)}')
-            flash(f'Error al procesar la solicitud: {str(e)}', 'error')
-            return render_template('registro.html', form_data=form_data, errors=errors, active_page='clientes')
-    
-    return render_template('registro.html', form_data={}, errors={}, active_page='clientes')
+            print(f"\nERROR: {str(e)}")
+            flash(f'Error al registrar cliente: {str(e)}', 'danger')
+            return render_template('registro.html')
+
+    return render_template('registro.html')
 
 
 @app.route('/reportes')
@@ -265,25 +267,27 @@ def ver_cliente(id):
 @app.route('/cliente/editar/<int:id>', methods=['GET', 'POST'])
 def editar_cliente(id):
     cliente = Cliente.query.get_or_404(id)
-
+    
     if request.method == 'POST':
         try:
             cliente.nombre = request.form['nombre']
             cliente.apellido = request.form['apellido']
             cliente.dni = request.form['dni']
             cliente.telefono = request.form['telefono']
-            cliente.correo_electronico = request.form.get('correo_electronico', '')
-            cliente.direccion = request.form.get('direccion', '')
-
+            cliente.correo_electronico = request.form['correo_electronico']
+            cliente.direccion = request.form['direccion']
+            
             db.session.commit()
             flash('Cliente actualizado exitosamente', 'success')
             return redirect(url_for('clientes'))
-
+            
         except Exception as e:
             db.session.rollback()
-            flash(f'Error al actualizar el cliente: {str(e)}', 'error')
-
-    return render_template('cliente_editar.html', cliente=cliente)
+            flash('Error al actualizar el cliente: ' + str(e), 'danger')
+    
+    return render_template('cliente_editar.html', 
+                         cliente=cliente, 
+                         active_page='clientes')
 
 
 @app.route('/exportar_excel')
@@ -380,7 +384,7 @@ def pagar_cuota(cuota_id):
             # Si es la última cuota, actualizar estado del préstamo
             if prestamo.cuotas_pendientes == 0:
                 prestamo.estado = 'FINALIZADO'
-                prestamo.fecha_vencimiento = datetime.now()
+                prestamo.fecha_finalizacion = datetime.now()
 
             db.session.commit()
             flash('Cuota pagada exitosamente', 'success')
@@ -456,7 +460,7 @@ def crear_prestamo():
         monto_cuota = round(monto_total / cuotas_totales, 2)
 
         # Calcular fecha de vencimiento final del préstamo
-        fecha_vencimiento_final = primer_vencimiento + relativedelta(months=cuotas_totales-1)
+        fecha_finalizacion_final = primer_vencimiento + relativedelta(months=cuotas_totales-1)
 
         # Crear el préstamo
         nuevo_prestamo = Prestamo(
@@ -468,7 +472,7 @@ def crear_prestamo():
             monto_cuotas=monto_cuota,
             monto_adeudado=monto_total,
             fecha_inicio=hoy,
-            fecha_vencimiento=fecha_vencimiento_final,
+            fecha_finalizacion=fecha_finalizacion_final,
             estado='ACTIVO'
         )
 
@@ -842,7 +846,7 @@ def guardar_prestamo():
             monto_cuotas=float(request.form['monto_cuotas']),
             monto_adeudado=float(request.form['monto_adeudado']),
             fecha_inicio=fecha_inicio,
-            fecha_vencimiento=datetime.strptime(request.form['fecha_vencimiento'], '%Y-%m-%d'),
+            fecha_finalizacion=datetime.strptime(request.form['fecha_finalizacion'], '%Y-%m-%d'),
             estado='ACTIVO'
         )
 
@@ -925,6 +929,92 @@ def eliminar_cliente(id):
         flash(f'Error al eliminar el cliente: {str(e)}', 'error')
         
     return redirect(url_for('clientes'))
+
+
+@app.route('/debug_schema')
+def debug_schema():
+    try:
+        inspector = inspect(db.engine)
+        
+        html = '<h2>Estructura de la Base de Datos</h2>'
+        
+        # Obtener todas las tablas
+        for table_name in inspector.get_table_names():
+            html += f'<h3>Tabla: {table_name}</h3>'
+            html += '<table border="1" style="border-collapse: collapse; margin-bottom: 20px;">'
+            html += '''
+                <tr>
+                    <th style="padding: 8px;">Columna</th>
+                    <th style="padding: 8px;">Tipo</th>
+                    <th style="padding: 8px;">Nullable</th>
+                    <th style="padding: 8px;">Default</th>
+                    <th style="padding: 8px;">Primary Key</th>
+                    <th style="padding: 8px;">Foreign Key</th>
+                </tr>
+            '''
+            
+            # Obtener columnas de la tabla
+            columns = inspector.get_columns(table_name)
+            for column in columns:
+                # Verificar si es foreign key
+                fk = ''
+                for fk_data in inspector.get_foreign_keys(table_name):
+                    if column['name'] in fk_data['constrained_columns']:
+                        fk = f"-> {fk_data['referred_table']}.{fk_data['referred_columns'][0]}"
+                
+                html += f'''
+                    <tr>
+                        <td style="padding: 8px;">{column['name']}</td>
+                        <td style="padding: 8px;">{column['type']}</td>
+                        <td style="padding: 8px;">{column['nullable']}</td>
+                        <td style="padding: 8px;">{column.get('default', '')}</td>
+                        <td style="padding: 8px;">{'Yes' if column.get('primary_key', False) else 'No'}</td>
+                        <td style="padding: 8px;">{fk}</td>
+                    </tr>
+                '''
+            
+            html += '</table>'
+            
+            # Mostrar índices
+            indices = inspector.get_indexes(table_name)
+            if indices:
+                html += '<h4>Índices:</h4>'
+                html += '<ul>'
+                for index in indices:
+                    html += f'''
+                        <li>
+                            {index['name']}: {', '.join(index['column_names'])}
+                            {'(único)' if index['unique'] else ''}
+                        </li>
+                    '''
+                html += '</ul>'
+        
+        return html
+    except Exception as e:
+        return f'Error al inspeccionar la base de datos: {str(e)}'
+    
+@app.route('/cleanup_db')
+def cleanup_db():
+    try:
+        with db.engine.connect() as conn:
+            # Desactivar temporalmente las restricciones de clave foránea
+            conn.execute(text("PRAGMA foreign_keys = OFF"))
+
+            # Eliminar en orden correcto (primero las tablas hijas)
+            conn.execute(text("DELETE FROM cuota"))
+            conn.execute(text("DELETE FROM prestamo"))
+            conn.execute(text("DELETE FROM cliente"))
+            
+            # Reactivar las restricciones de clave foránea
+            conn.execute(text("PRAGMA foreign_keys = ON"))
+            
+            # Confirmar los cambios
+            conn.commit()
+            
+            return "Limpieza de base de datos completada exitosamente"
+            
+    except Exception as e:
+        return f"Error limpiando la base de datos: {str(e)}"
 
 if __name__ == '__main__':
     app.run(debug=True)
