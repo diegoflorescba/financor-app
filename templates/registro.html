@@ -15,109 +15,161 @@
             {% endif %}
             {% endwith %}
 
-            <!-- Datos Personales -->
-            <div class="mb-5">
-                <h4 class="border-bottom pb-2 mb-4">Datos Personales</h4>
+            <form method="POST" action="{{ url_for('registro') }}">
+                <!-- Datos Personales -->
+                <div class="mb-5">
+                    <h4 class="border-bottom pb-2 mb-4">Datos Personales</h4>
 
-                <div class="form-group">
-                    <label for="nombre" class="form-label">Nombre *</label>
-                    <input type="text" class="form-control form-control-lg" id="nombre" name="nombre" required>
+                    <div class="form-group">
+                        <label for="nombre" class="form-label">Nombre *</label>
+                        <input type="text" class="form-control form-control-lg" id="nombre" name="nombre" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="apellido" class="form-label">Apellido *</label>
+                        <input type="text" class="form-control form-control-lg" id="apellido" name="apellido" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dni" class="form-label">DNI *</label>
+                        <input type="text" class="form-control form-control-lg" id="dni" name="dni" required
+                            maxlength="8">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telefono" class="form-label">Teléfono</label>
+                        <input type="tel" class="form-control form-control-lg" id="telefono" name="telefono">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="correo_electronico" class="form-label">Correo Electrónico</label>
+                        <input type="email" class="form-control form-control-lg" id="correo_electronico"
+                            name="correo_electronico">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="direccion" class="form-label">Dirección</label>
+                        <input type="text" class="form-control form-control-lg" id="direccion" name="direccion">
+                    </div>
+
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="documentacion_verificada"
+                            name="documentacion_verificada">
+                        <label class="form-check-label fs-5" for="documentacion_verificada">Documentación
+                            Verificada</label>
+                    </div>
+
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="tiene_prestamo" name="tiene_prestamo">
+                        <label class="form-check-label fs-5" for="tiene_prestamo">Incluir Préstamo</label>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="apellido" class="form-label">Apellido *</label>
-                    <input type="text" class="form-control form-control-lg" id="apellido" name="apellido" required>
+                <!-- Datos del Préstamo -->
+                <div id="seccion_prestamo" style="display: none;">
+                    <h4 class="border-bottom pb-2 mb-4">Datos del Préstamo</h4>
+
+                    <div class="form-group">
+                        <label for="monto_prestado" class="form-label">Monto del Préstamo *</label>
+                        <input type="number" class="form-control form-control-lg" id="monto_prestado"
+                            name="monto_prestado" step="0.01">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tasa_interes" class="form-label">Tasa de Interés (%) *</label>
+                        <input type="number" class="form-control form-control-lg" id="tasa_interes" name="tasa_interes"
+                            step="0.01">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cuotas_totales" class="form-label">Cantidad de Cuotas *</label>
+                        <input type="number" class="form-control form-control-lg" id="cuotas_totales"
+                            name="cuotas_totales">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="monto_cuotas" class="form-label">Monto por Cuota *</label>
+                        <input type="number" class="form-control form-control-lg" id="monto_cuotas" name="monto_cuotas"
+                            step="0.01">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="monto_adeudado" class="form-label">Monto Total</label>
+                        <input type="number" class="form-control form-control-lg bg-light" id="monto_adeudado"
+                            name="monto_adeudado" readonly>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fecha_inicio" class="form-label">Fecha de Inicio *</label>
+                        <input type="date" class="form-control form-control-lg" id="fecha_inicio" name="fecha_inicio">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fecha_finalizacion" class="form-label">Fecha de Finalización</label>
+                        <input type="date" class="form-control form-control-lg bg-light" id="fecha_finalizacion"
+                            name="fecha_finalizacion" readonly>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="dni" class="form-label">DNI *</label>
-                    <input type="text" class="form-control form-control-lg" id="dni" name="dni" required maxlength="8">
+                <!-- Datos del Garante -->
+                <div id="seccion_garante" style="display: none;">
+                    <h4 class="border-bottom pb-2 mb-4">Datos del Garante</h4>
+
+                    <div class="form-check mb-4">
+                        <input type="checkbox" class="form-check-input" id="tiene_garante" name="tiene_garante">
+                        <label class="form-check-label fs-5" for="tiene_garante">¿Incluir Garante?</label>
+                    </div>
+
+                    <div id="datos_garante" style="display: none;">
+                        <div class="form-group">
+                            <label for="dni_garante" class="form-label">DNI Garante *</label>
+                            <input type="text" class="form-control form-control-lg" id="dni_garante" name="dni_garante"
+                                maxlength="8">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="nombre_garante" class="form-label">Nombre Garante *</label>
+                            <input type="text" class="form-control form-control-lg" id="nombre_garante"
+                                name="nombre_garante">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="apellido_garante" class="form-label">Apellido Garante *</label>
+                            <input type="text" class="form-control form-control-lg" id="apellido_garante"
+                                name="apellido_garante">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="telefono_garante" class="form-label">Teléfono Garante</label>
+                            <input type="tel" class="form-control form-control-lg" id="telefono_garante"
+                                name="telefono_garante">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="correo_garante" class="form-label">Email Garante</label>
+                            <input type="email" class="form-control form-control-lg" id="correo_garante"
+                                name="correo_garante">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="direccion_garante" class="form-label">Dirección Garante</label>
+                            <input type="text" class="form-control form-control-lg" id="direccion_garante"
+                                name="direccion_garante">
+                        </div>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="telefono" class="form-label">Teléfono</label>
-                    <input type="tel" class="form-control form-control-lg" id="telefono" name="telefono">
+                <!-- Botones -->
+                <div class="mt-5">
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <span class="px-5">Guardar</span>
+                    </button>
+                    <button type="button" onclick="window.location.href='{{ url_for('clientes') }}'"
+                        class="btn btn-danger btn-lg ms-3">
+                        <span class="px-5">Cancelar</span>
+                    </button>
                 </div>
-
-                <div class="form-group">
-                    <label for="correo_electronico" class="form-label">Correo Electrónico</label>
-                    <input type="email" class="form-control form-control-lg" id="correo_electronico"
-                        name="correo_electronico">
-                </div>
-
-                <div class="form-group">
-                    <label for="direccion" class="form-label">Dirección</label>
-                    <input type="text" class="form-control form-control-lg" id="direccion" name="direccion">
-                </div>
-
-                <div class="form-check">
-                    <input type="checkbox" class="form-check-input" id="documentacion_verificada"
-                        name="documentacion_verificada">
-                    <label class="form-check-label fs-5" for="documentacion_verificada">Documentación Verificada</label>
-                </div>
-
-                <div class="form-check">
-                    <input type="checkbox" class="form-check-input" id="tiene_prestamo" name="tiene_prestamo">
-                    <label class="form-check-label fs-5" for="tiene_prestamo">Incluir Préstamo</label>
-                </div>
-            </div>
-
-            <!-- Datos del Préstamo -->
-            <div id="seccion_prestamo" style="display: none;">
-                <h4 class="border-bottom pb-2 mb-4">Datos del Préstamo</h4>
-
-                <div class="form-group">
-                    <label for="monto_prestado" class="form-label">Monto del Préstamo *</label>
-                    <input type="number" class="form-control form-control-lg" id="monto_prestado" name="monto_prestado"
-                        step="0.01">
-                </div>
-
-                <div class="form-group">
-                    <label for="tasa_interes" class="form-label">Tasa de Interés (%) *</label>
-                    <input type="number" class="form-control form-control-lg" id="tasa_interes" name="tasa_interes"
-                        step="0.01">
-                </div>
-
-                <div class="form-group">
-                    <label for="cuotas_totales" class="form-label">Cantidad de Cuotas *</label>
-                    <input type="number" class="form-control form-control-lg" id="cuotas_totales" name="cuotas_totales">
-                </div>
-
-                <div class="form-group">
-                    <label for="monto_cuotas" class="form-label">Monto por Cuota *</label>
-                    <input type="number" class="form-control form-control-lg" id="monto_cuotas" name="monto_cuotas"
-                        step="0.01">
-                </div>
-
-                <div class="form-group">
-                    <label for="monto_adeudado" class="form-label">Monto Total</label>
-                    <input type="number" class="form-control form-control-lg bg-light" id="monto_adeudado"
-                        name="monto_adeudado" readonly>
-                </div>
-
-                <div class="form-group">
-                    <label for="fecha_inicio" class="form-label">Fecha de Inicio *</label>
-                    <input type="date" class="form-control form-control-lg" id="fecha_inicio" name="fecha_inicio">
-                </div>
-
-                <div class="form-group">
-                    <label for="fecha_finalizacion" class="form-label">Fecha de Finalización</label>
-                    <input type="date" class="form-control form-control-lg bg-light" id="fecha_finalizacion"
-                        name="fecha_finalizacion" readonly>
-                </div>
-            </div>
-
-            <!-- Botones -->
-            <div class="mt-5">
-                <button type="submit" class="btn btn-success btn-lg">
-                    <span class="px-5">Guardar</span>
-                </button>
-                <button type="button" onclick="window.location.href='{{ url_for('clientes') }}'"
-                    class="btn btn-danger btn-lg ms-3"
-                    style="background-color: #dc3545; border-color: #dc3545; color: white;">
-                    <span class="px-5">Cancelar</span>
-                </button>
-            </div>
+            </form>
         </div>
     </div>
 
@@ -200,16 +252,44 @@
     .form-control-lg[readonly] {
         background-color: #f8f9fa;
     }
+
+    /* Estilos para la sección del garante */
+    #seccion_garante {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid #dee2e6;
+    }
+
+    #datos_garante .form-group {
+        margin-bottom: 1.5rem;
+    }
 </style>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        console.log('DOM Loaded');
+
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function (e) {
+            console.log('Form submitted');
+            // No prevenir el envío del formulario aquí
+        });
+
         const tienePrestamo = document.getElementById('tiene_prestamo');
         const seccionPrestamo = document.getElementById('seccion_prestamo');
+        const seccionGarante = document.getElementById('seccion_garante');
+        const tieneGarante = document.getElementById('tiene_garante');
+        const datosGarante = document.getElementById('datos_garante');
 
         // Mostrar/ocultar sección de préstamo
         function togglePrestamo() {
             seccionPrestamo.style.display = tienePrestamo.checked ? 'block' : 'none';
+            seccionGarante.style.display = tienePrestamo.checked ? 'block' : 'none';
+
+            if (!tienePrestamo.checked) {
+                tieneGarante.checked = false;
+                datosGarante.style.display = 'none';
+            }
 
             // Campos que deben ser requeridos cuando se marca el préstamo
             const camposRequeridos = [
@@ -306,6 +386,27 @@
                 fechaCuota.setMonth(fechaCuota.getMonth() + 1);
             }
         }
+
+        // Mostrar/ocultar campos del garante
+        tieneGarante.addEventListener('change', function () {
+            datosGarante.style.display = this.checked ? 'block' : 'none';
+
+            // Campos requeridos del garante
+            const camposGarante = ['dni_garante', 'nombre_garante', 'apellido_garante'];
+
+            camposGarante.forEach(campo => {
+                const elemento = document.getElementById(campo);
+                if (elemento) {
+                    elemento.required = this.checked;
+                }
+            });
+
+            // Limpiar campos si se desmarca
+            if (!this.checked) {
+                const campos = datosGarante.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]');
+                campos.forEach(campo => campo.value = '');
+            }
+        });
 
         // Event listeners
         tienePrestamo.addEventListener('change', togglePrestamo);

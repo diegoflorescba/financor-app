@@ -26,6 +26,25 @@ class Cliente(db.Model):
         return f'<Cliente {self.nombre} {self.apellido}>'
 
 
+class Garante(db.Model):
+    __tablename__ = 'garante'
+
+    id_garante = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    apellido = db.Column(db.String(100), nullable=False)
+    dni = db.Column(db.String(20), unique=True, nullable=False)
+    telefono = db.Column(db.String(20))
+    direccion = db.Column(db.String(200))
+    correo_electronico = db.Column(db.String(120))
+    documentacion_verificada = db.Column(db.Boolean, default=False)
+    fecha_registro = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    activo = db.Column(db.Boolean, default=True)
+    prestamos_garantizados = db.relationship('Prestamo', backref='garante', lazy=True)
+
+    def __repr__(self):
+        return f'<Garante {self.nombre} {self.apellido}>'
+
+
 class Prestamo(db.Model):
     __tablename__ = 'prestamo'
 
@@ -41,6 +60,7 @@ class Prestamo(db.Model):
     estado = db.Column(db.String(20), default='ACTIVO')
     fecha_ultima_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     id_cliente = db.Column(db.Integer, db.ForeignKey('cliente.id_cliente'), nullable=False)
+    id_garante = db.Column(db.Integer, db.ForeignKey('garante.id_garante'), nullable=True)
     cuotas = db.relationship('Cuota', backref='prestamo', lazy=True, cascade='all, delete-orphan')
 
     def __repr__(self):

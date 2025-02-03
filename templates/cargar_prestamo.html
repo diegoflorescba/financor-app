@@ -62,6 +62,63 @@
                     </div>
                 </div>
 
+                <!-- Después de los datos del préstamo y antes de los botones, agregamos la sección del garante -->
+                <div class="card shadow mt-4 mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">Datos del Garante (Opcional)</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check mb-3">
+                            <input type="checkbox" id="tiene_garante" name="tiene_garante" class="form-check-input">
+                            <label class="form-check-label" for="tiene_garante">¿Incluir Garante?</label>
+                        </div>
+
+                        <div id="datos_garante" style="display: none;">
+                            <!-- DNI Garante -->
+                            <div class="form-group">
+                                <label for="dni_garante" class="form-label">DNI Garante *</label>
+                                <input type="text" id="dni_garante" name="dni_garante"
+                                    class="form-control form-control-lg">
+                            </div>
+
+                            <!-- Nombre Garante -->
+                            <div class="form-group">
+                                <label for="nombre_garante" class="form-label">Nombre *</label>
+                                <input type="text" id="nombre_garante" name="nombre_garante"
+                                    class="form-control form-control-lg">
+                            </div>
+
+                            <!-- Apellido Garante -->
+                            <div class="form-group">
+                                <label for="apellido_garante" class="form-label">Apellido *</label>
+                                <input type="text" id="apellido_garante" name="apellido_garante"
+                                    class="form-control form-control-lg">
+                            </div>
+
+                            <!-- Teléfono Garante -->
+                            <div class="form-group">
+                                <label for="telefono_garante" class="form-label">Teléfono</label>
+                                <input type="text" id="telefono_garante" name="telefono_garante"
+                                    class="form-control form-control-lg">
+                            </div>
+
+                            <!-- Email Garante -->
+                            <div class="form-group">
+                                <label for="correo_garante" class="form-label">Email</label>
+                                <input type="email" id="correo_garante" name="correo_garante"
+                                    class="form-control form-control-lg">
+                            </div>
+
+                            <!-- Dirección Garante -->
+                            <div class="form-group">
+                                <label for="direccion_garante" class="form-label">Dirección</label>
+                                <input type="text" id="direccion_garante" name="direccion_garante"
+                                    class="form-control form-control-lg">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Botones -->
                 <div class="mt-5">
                     <button type="submit" class="btn btn-success btn-lg">
@@ -140,6 +197,22 @@
     .table th {
         padding: 1rem;
     }
+
+    .is-invalid {
+        border-color: #dc3545 !important;
+    }
+
+    #datos_garante .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .form-check {
+        padding-left: 1.5rem;
+    }
+
+    .form-check-input {
+        margin-left: -1.5rem;
+    }
 </style>
 
 <script>
@@ -163,25 +236,32 @@
     }
 
     function calcularFechaVencimiento() {
-        const fechaInicio = document.getElementById('fecha_inicio').value;
+        const fechaInicio = new Date(document.getElementById('fecha_inicio').value);
         const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
 
         if (fechaInicio && cuotasTotales) {
-            const fecha = new Date(fechaInicio);
-            fecha.setMonth(fecha.getMonth() + cuotasTotales);
+            let fechaPrimeraCuota = new Date(fechaInicio);
+
+            // Si la fecha es después del 10, la primera cuota será el 10 del mes siguiente
+            if (fechaInicio.getDate() > 10) {
+                fechaPrimeraCuota.setMonth(fechaPrimeraCuota.getMonth() + 1);
+            }
+
+            // Ajustar al día 10
+            fechaPrimeraCuota.setDate(10);
+
+            // Calcular fecha de finalización
+            let fechaFin = new Date(fechaPrimeraCuota);
+            fechaFin.setMonth(fechaFin.getMonth() + (cuotasTotales - 1)); // -1 porque la primera cuota ya está incluida
 
             // Formatear fecha para mostrar
-            const fechaFormateada = fecha.toISOString().split('T')[0];
+            const fechaFormateada = fechaFin.toISOString().split('T')[0];
             document.getElementById('fecha_finalizacion').value = fechaFormateada;
+
+            // Generar vista previa de cuotas
+            generarCuotas(fechaPrimeraCuota);
         }
     }
-
-    // Establecer fecha actual como valor por defecto
-    document.addEventListener('DOMContentLoaded', function () {
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('fecha_inicio').value = today;
-        calcularFechaVencimiento();
-    });
 
     function generarCuotas(fechaPrimeraCuota) {
         const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
@@ -224,15 +304,15 @@
     // Asegurarnos de que la tabla se actualice cuando cambien los valores relevantes
     document.getElementById('monto_cuotas').addEventListener('input', () => {
         calcularMontoTotal();
-        calcularFechaFinalizacion(); // Esto llamará a generarCuotas
+        calcularFechaVencimiento(); // Esto llamará a generarCuotas
     });
 
     document.getElementById('cuotas_totales').addEventListener('input', () => {
         calcularMontoTotal();
-        calcularFechaFinalizacion(); // Esto llamará a generarCuotas
+        calcularFechaVencimiento(); // Esto llamará a generarCuotas
     });
 
-    document.getElementById('fecha_inicio').addEventListener('change', calcularFechaFinalizacion);
+    document.getElementById('fecha_inicio').addEventListener('change', calcularFechaVencimiento);
 
     // Calcular monto total cuando cambie el monto de cuota o cantidad de cuotas
     function calcularMontoTotal() {
@@ -245,38 +325,47 @@
         }
     }
 
-    // Calcular fecha de vencimiento
-    function calcularFechaFinalizacion() {
-        const fechaInicio = new Date(document.getElementById('fecha_inicio').value);
-        const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
-
-        if (fechaInicio && cuotasTotales) {
-            let fechaPrimeraCuota = new Date(fechaInicio);
-
-            // Si la fecha es después del 10, la primera cuota será el 10 del mes siguiente
-            if (fechaInicio.getDate() > 10) {
-                fechaPrimeraCuota.setMonth(fechaPrimeraCuota.getMonth() + 1);
-            }
-
-            // Ajustar al día 10
-            fechaPrimeraCuota.setDate(10);
-
-            // Calcular fecha de finalización
-            let fechaFin = new Date(fechaPrimeraCuota);
-            fechaFin.setMonth(fechaFin.getMonth() + (cuotasTotales - 1)); // -1 porque la primera cuota ya está incluida
-
-            // Formatear fecha para mostrar
-            const fechaFormateada = fechaFin.toISOString().split('T')[0];
-            document.getElementById('fecha_finalizacion').value = fechaFormateada;
-
-            // Generar vista previa de cuotas
-            generarCuotas(fechaPrimeraCuota);
-        }
-    }
-
     // Establecer fecha actual por defecto
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('fecha_inicio').value = today;
-    calcularFechaFinalizacion();
+    document.addEventListener('DOMContentLoaded', function () {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('fecha_inicio').value = today;
+        calcularFechaVencimiento();
+    });
+
+    document.getElementById('tiene_garante').addEventListener('change', function () {
+        const datosGarante = document.getElementById('datos_garante');
+        datosGarante.style.display = this.checked ? 'block' : 'none';
+
+        // Si se desmarca la opción, limpiar los campos
+        if (!this.checked) {
+            const campos = datosGarante.querySelectorAll('input[type="text"], input[type="email"]');
+            campos.forEach(campo => campo.value = '');
+        }
+    });
+
+    // Validación del formulario
+    document.getElementById('prestamo-form').addEventListener('submit', function (e) {
+        const tieneGarante = document.getElementById('tiene_garante').checked;
+
+        if (tieneGarante) {
+            const camposRequeridos = ['dni_garante', 'nombre_garante', 'apellido_garante'];
+            let faltanCampos = false;
+
+            camposRequeridos.forEach(campo => {
+                const input = document.getElementById(campo);
+                if (!input.value.trim()) {
+                    faltanCampos = true;
+                    input.classList.add('is-invalid');
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+            });
+
+            if (faltanCampos) {
+                e.preventDefault();
+                alert('Por favor complete todos los campos requeridos del garante');
+            }
+        }
+    });
 </script>
 {% endblock %}

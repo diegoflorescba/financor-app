@@ -1,42 +1,142 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<h1>Detalles del Cliente</h1>
+<div class="container mt-5">
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white">
+            <h2 class="mb-0">Detalles del Cliente</h2>
+        </div>
+        <div class="card-body">
+            <h3 class="mb-4">{{ cliente.nombre }} {{ cliente.apellido }}</h3>
 
-<div class="cliente-info">
-    <h2>{{ cliente.nombre }} {{ cliente.apellido }}</h2>
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <h4 class="border-bottom pb-2">Información Personal</h4>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><strong>DNI:</strong> {{ cliente.dni }}</li>
+                        <li class="mb-2"><strong>Dirección:</strong> {{ cliente.direccion }}</li>
+                        <li class="mb-2"><strong>Teléfono:</strong> {{ cliente.telefono }}</li>
+                        <li class="mb-2"><strong>Email:</strong> {{ cliente.correo_electronico }}</li>
+                        <li class="mb-2"><strong>Documentación verificada:</strong>
+                            {% if cliente.documentacion_verificada %}
+                            <span class="badge bg-success">Sí</span>
+                            {% else %}
+                            <span class="badge bg-warning">No</span>
+                            {% endif %}
+                        </li>
+                    </ul>
+                </div>
+            </div>
 
-    <h3>Información Personal</h3>
-    <ul>
-        <li><strong>DNI:</strong> {{ cliente.dni }}</li>
-        <li><strong>Dirección:</strong> {{ cliente.direccion }}</li>
-        <li><strong>Teléfono:</strong> {{ cliente.telefono }}</li>
-        <li><strong>Email:</strong> {{ cliente.correo_electronico }}</li>
-        <li><strong>Documentación verificada:</strong>
-            {% if cliente.documentacion_verificada %}Sí{% else %}No{% endif %}
-        </li>
-    </ul>
+            <h4 class="border-bottom pb-2 mb-4">Préstamos</h4>
+            {% if cliente.prestamos %}
+            {% for prestamo in cliente.prestamos %}
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Préstamo #{{ prestamo.id_prestamo }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="mb-3">Detalles del Préstamo</h6>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><strong>Monto:</strong> ${{ prestamo.monto_prestado }}</li>
+                                <li class="mb-2"><strong>Interés:</strong> {{ prestamo.tasa_interes }}%</li>
+                                <li class="mb-2"><strong>Cuotas totales:</strong> {{ prestamo.cuotas_totales }}</li>
+                                <li class="mb-2"><strong>Cuotas pendientes:</strong> {{ prestamo.cuotas_pendientes }}
+                                </li>
+                                <li class="mb-2"><strong>Monto por cuota:</strong> ${{ prestamo.monto_cuotas }}</li>
+                                <li class="mb-2"><strong>Fecha inicio:</strong> {{
+                                    prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</li>
+                                <li class="mb-2"><strong>Fecha finalización:</strong> {{
+                                    prestamo.fecha_finalizacion.strftime('%d/%m/%Y') }}</li>
+                            </ul>
+                        </div>
 
-    <h3>Préstamos</h3>
-    {% if cliente.prestamos %}
-    {% for prestamo in cliente.prestamos %}
-    <div class="prestamo-info">
-        <h4>Préstamo #{{ prestamo.id_prestamo }}</h4>
-        <ul>
-            <li><strong>Monto:</strong> ${{ prestamo.monto_prestado }}</li>
-            <li><strong>Interés:</strong> {{ prestamo.tasa_interes }}%</li>
-            <li><strong>Cuotas totales:</strong> {{ prestamo.cuotas_totales }}</li>
-            <li><strong>Cuotas pendientes:</strong> {{ prestamo.cuotas_pendientes }}</li>
-            <li><strong>Monto por cuota:</strong> ${{ prestamo.monto_cuotas }}</li>
-            <li><strong>Fecha inicio:</strong> {{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</li>
-            <li><strong>Fecha finalización:</strong> {{ prestamo.fecha_finalizacion.strftime('%d/%m/%Y') }}</li>
-        </ul>
+                        {% if prestamo.garante %}
+                        <div class="col-md-6">
+                            <h6 class="mb-3">Datos del Garante</h6>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><strong>Nombre:</strong> {{ prestamo.garante.nombre }} {{
+                                    prestamo.garante.apellido }}</li>
+                                <li class="mb-2"><strong>DNI:</strong> {{ prestamo.garante.dni }}</li>
+                                <li class="mb-2"><strong>Teléfono:</strong> {{ prestamo.garante.telefono }}</li>
+                                <li class="mb-2"><strong>Email:</strong> {{ prestamo.garante.correo_electronico }}</li>
+                                <li class="mb-2"><strong>Dirección:</strong> {{ prestamo.garante.direccion }}</li>
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mt-4">
+                        <h6 class="mb-3">Cuotas</h6>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>N° Cuota</th>
+                                        <th>Vencimiento</th>
+                                        <th>Monto</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for cuota in prestamo.cuotas %}
+                                    <tr>
+                                        <td>{{ cuota.numero_cuota }}</td>
+                                        <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                                        <td>${{ cuota.monto }}</td>
+                                        <td>
+                                            {% if cuota.estado == 'PAGADA' %}
+                                            <span class="badge bg-success">Pagada</span>
+                                            {% else %}
+                                            <span class="badge bg-warning">Pendiente</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="text-muted">Este cliente no tiene préstamos registrados.</p>
+            {% endif %}
+
+            <div class="mt-4">
+                <a href="{{ url_for('reportes') }}" class="btn btn-secondary">
+                    Volver a Reportes
+                </a>
+            </div>
+        </div>
     </div>
-    {% endfor %}
-    {% else %}
-    <p>Este cliente no tiene préstamos registrados.</p>
-    {% endif %}
 </div>
 
-<a href="{{ url_for('reportes') }}" class="button">Volver a Reportes</a>
+<style>
+    .card {
+        border: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .badge {
+        font-size: 0.875rem;
+        padding: 0.35em 0.65em;
+    }
+
+    .table th {
+        background-color: #f8f9fa;
+    }
+
+    .list-unstyled li {
+        padding: 0.5rem 0;
+    }
+
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    }
+</style>
 {% endblock %}
