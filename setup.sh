@@ -3,19 +3,57 @@
 # Colores para los mensajes
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}Iniciando instalación de Financor...${NC}"
 
-# Verificar si Python está instalado
-if ! command -v python3 &> /dev/null; then
-    echo "Python3 no está instalado. Por favor, instala Python 3.8 o superior."
-    exit 1
+# Verificar si Homebrew está instalado
+if ! command -v brew &> /dev/null; then
+    echo -e "${BLUE}Instalando Homebrew...${NC}"
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    
+    # Agregar Homebrew al PATH
+    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+    eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
+
+# Verificar la versión de Python
+REQUIRED_VERSION="3.10.13"
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+
+if [ "$PYTHON_VERSION" != "$REQUIRED_VERSION" ]; then
+    echo -e "${BLUE}Instalando Python $REQUIRED_VERSION...${NC}"
+    
+    # Instalar pyenv si no está instalado
+    if ! command -v pyenv &> /dev/null; then
+        brew install pyenv
+        
+        # Configurar pyenv
+        echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.zshrc
+        echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.zshrc
+        echo 'eval "$(pyenv init -)"' >> ~/.zshrc
+        
+        source ~/.zshrc
+    fi
+    
+    # Instalar Python 3.10.13
+    pyenv install $REQUIRED_VERSION
+    pyenv global $REQUIRED_VERSION
+    
+    # Verificar la instalación
+    PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+    if [ "$PYTHON_VERSION" != "$REQUIRED_VERSION" ]; then
+        echo -e "${RED}Error: No se pudo instalar Python $REQUIRED_VERSION${NC}"
+        exit 1
+    fi
+fi
+
+echo -e "${GREEN}Python $REQUIRED_VERSION está instalado correctamente${NC}"
 
 # Verificar si pip está instalado
 if ! command -v pip3 &> /dev/null; then
-    echo "Pip3 no está instalado. Instalando pip..."
+    echo -e "${BLUE}Instalando pip...${NC}"
     curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
     python3 get-pip.py
     rm get-pip.py

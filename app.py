@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from datetime import datetime, date, timedelta
 from calendar import monthrange
