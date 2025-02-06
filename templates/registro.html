@@ -105,6 +105,13 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="fecha_vencimiento_primera_cuota" class="form-label">Fecha Vencimiento Primera Cuota
+                            *</label>
+                        <input type="date" class="form-control form-control-lg" id="fecha_vencimiento_primera_cuota"
+                            name="fecha_vencimiento_primera_cuota" required>
+                    </div>
+
+                    <div class="form-group">
                         <label for="fecha_finalizacion" class="form-label">Fecha de Finalización</label>
                         <input type="date" class="form-control form-control-lg bg-light" id="fecha_finalizacion"
                             name="fecha_finalizacion" readonly>
@@ -326,19 +333,17 @@
             const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
 
             if (fechaInicio && cuotasTotales) {
-                let fechaPrimeraCuota = new Date(fechaInicio);
+                // Calcular fecha de primera cuota (siempre el 10 del mes siguiente)
+                let fechaPrimeraCuota = new Date(fechaInicio.getFullYear(), fechaInicio.getMonth() + 1, 10);
 
-                // Si la fecha es después del 10, la primera cuota será el 10 del mes siguiente
-                if (fechaInicio.getDate() > 10) {
-                    fechaPrimeraCuota.setMonth(fechaPrimeraCuota.getMonth() + 1);
+                // Si estamos en diciembre, avanzar al siguiente año
+                if (fechaInicio.getMonth() === 11) {
+                    fechaPrimeraCuota = new Date(fechaInicio.getFullYear() + 1, 0, 10);
                 }
-
-                // Ajustar al día 10
-                fechaPrimeraCuota.setDate(10);
 
                 // Calcular fecha de finalización
                 let fechaFin = new Date(fechaPrimeraCuota);
-                fechaFin.setMonth(fechaFin.getMonth() + (cuotasTotales - 1)); // -1 porque la primera cuota ya está incluida
+                fechaFin.setMonth(fechaFin.getMonth() + (cuotasTotales - 1));
 
                 // Formatear fecha para mostrar
                 const fechaFormateada = fechaFin.toISOString().split('T')[0];
@@ -349,96 +354,75 @@
             }
         }
 
-        function generarCuotas(fechaPrimeraCuota) {
+        function generarCuotas() {
+            const fechaVencimientoPrimeraCuota = new Date(document.getElementById('fecha_vencimiento_primera_cuota').value);
             const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
             const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
             const tbody = document.getElementById('cuotas-body');
             const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
 
-            if (!fechaPrimeraCuota || !cuotasTotales || !montoCuota) return;
+            if (!fechaVencimientoPrimeraCuota || !cuotasTotales || !montoCuota) return;
 
-            tbody.innerHTML = ''; // Limpiar tabla existente
+            tbody.innerHTML = '';
 
-            let fechaCuota = new Date(fechaPrimeraCuota);
+            for (let i = 0; i < cuotasTotales; i++) {
+                // Para la primera cuota usar la fecha exacta
+                const fechaVencimiento = new Date(fechaVencimientoPrimeraCuota);
+                if (i > 0) {
+                    // Para las siguientes cuotas, agregar meses a la fecha de primera cuota
+                    fechaVencimiento.setMonth(fechaVencimientoPrimeraCuota.getMonth() + i);
+                }
 
-            for (let i = 1; i <= cuotasTotales; i++) {
                 const row = document.createElement('tr');
 
                 // Formatear fecha para mostrar
-                const year = fechaCuota.getFullYear();
-                const month = String(fechaCuota.getMonth() + 1).padStart(2, '0');
-                const day = '10';
+                const year = fechaVencimiento.getFullYear();
+                const month = String(fechaVencimiento.getMonth() + 1).padStart(2, '0');
+                const day = String(fechaVencimiento.getDate()).padStart(2, '0');
                 const fechaFormateada = `${year}-${month}-${day}`;
 
                 // Determinar si la cuota está vencida
-                const estaPagada = fechaCuota < hoy;
-                const estado = estaPagada ? 'PAGADA' : 'PENDIENTE';
-                const claseEstado = estaPagada ? 'text-green-600' : 'text-gray-500';
+                const estaVencida = fechaVencimiento < hoy;
+                const estado = estaVencida ? 'PAGADA' : 'PENDIENTE';
+                const claseEstado = estaVencida ? 'text-success' : 'text-muted';
 
                 row.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${i}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${i + 1}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${fechaFormateada}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$${montoCuota.toFixed(2)}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm ${claseEstado}">${estado}</td>
                 `;
 
                 tbody.appendChild(row);
-                fechaCuota.setMonth(fechaCuota.getMonth() + 1);
+
+                // Si es la última cuota, actualizar fecha de finalización
+                if (i === cuotasTotales - 1) {
+                    document.getElementById('fecha_finalizacion').value = fechaFormateada;
+                }
             }
         }
 
-        // Mostrar/ocultar campos del garante
-        tieneGarante.addEventListener('change', function () {
-            datosGarante.style.display = this.checked ? 'block' : 'none';
-
-            // Campos requeridos del garante
-            const camposGarante = ['dni_garante', 'nombre_garante', 'apellido_garante'];
-
-            camposGarante.forEach(campo => {
-                const elemento = document.getElementById(campo);
-                if (elemento) {
-                    elemento.required = this.checked;
-                }
-            });
-
-            // Limpiar campos si se desmarca
-            if (!this.checked) {
-                const campos = datosGarante.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]');
-                campos.forEach(campo => campo.value = '');
-            }
-        });
-
         // Event listeners
-        tienePrestamo.addEventListener('change', togglePrestamo);
-
-        document.getElementById('monto_cuotas').addEventListener('input', () => {
+        document.getElementById('fecha_vencimiento_primera_cuota').addEventListener('change', generarCuotas);
+        document.getElementById('cuotas_totales').addEventListener('change', function () {
             calcularMontoTotal();
-            if (tienePrestamo.checked) {
-                calcularFechaFinalizacion();
-            }
+            generarCuotas();
         });
-
-        document.getElementById('cuotas_totales').addEventListener('input', () => {
+        document.getElementById('monto_cuotas').addEventListener('change', function () {
             calcularMontoTotal();
-            if (tienePrestamo.checked) {
-                calcularFechaFinalizacion();
-            }
+            generarCuotas();
         });
 
-        document.getElementById('fecha_inicio').addEventListener('change', () => {
-            if (tienePrestamo.checked) {
-                calcularFechaFinalizacion();
+        // Mantener la función calcularMontoTotal existente
+        function calcularMontoTotal() {
+            const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+            const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
+
+            if (montoCuota && cuotasTotales) {
+                const montoTotal = montoCuota * cuotasTotales;
+                document.getElementById('monto_adeudado').value = montoTotal.toFixed(2);
             }
-        });
-
-        // Establecer fecha actual por defecto
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('fecha_inicio').value = today;
-
-        // Inicializar estado
-        togglePrestamo();
-        if (tienePrestamo.checked) {
-            calcularFechaFinalizacion();
         }
     });
 </script>

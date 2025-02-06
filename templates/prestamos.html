@@ -42,6 +42,7 @@
                                         <th>Vencimiento</th>
                                         <th>Monto</th>
                                         <th>Estado</th>
+                                        <th>Acción</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -51,10 +52,21 @@
                                         <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
                                         <td>${{ "%.2f"|format(cuota.monto) }}</td>
                                         <td>
-                                            <span
+                                            <span id="estado-cuota-{{ cuota.id_cuota }}"
                                                 class="badge {% if cuota.pagada %}bg-success{% else %}bg-danger{% endif %}">
                                                 {{ 'Pagada' if cuota.pagada else 'Pendiente' }}
                                             </span>
+                                        </td>
+                                        <td>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox"
+                                                    id="cuota-{{ cuota.id_cuota }}" {% if cuota.pagada %}checked{% endif
+                                                    %}
+                                                    onchange="actualizarEstadoCuota({{ cuota.id_cuota }}, this.checked)">
+                                                <label class="form-check-label" for="cuota-{{ cuota.id_cuota }}">
+                                                    Marcar como pagada
+                                                </label>
+                                            </div>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -77,4 +89,45 @@
         {% endfor %}
     </div>
 </div>
+
+<script>
+    function actualizarEstadoCuota(idCuota, pagada) {
+        fetch('/actualizar_estado_cuota', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                id_cuota: idCuota,
+                pagada: pagada
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Actualizar el estado visual
+                    const spanEstado = document.getElementById(`estado-cuota-${idCuota}`);
+                    if (pagada) {
+                        spanEstado.classList.remove('bg-danger');
+                        spanEstado.classList.add('bg-success');
+                        spanEstado.textContent = 'Pagada';
+                    } else {
+                        spanEstado.classList.remove('bg-success');
+                        spanEstado.classList.add('bg-danger');
+                        spanEstado.textContent = 'Pendiente';
+                    }
+                } else {
+                    // Si hay error, revertir el checkbox
+                    document.getElementById(`cuota-${idCuota}`).checked = !pagada;
+                    alert('Error al actualizar el estado de la cuota');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Si hay error, revertir el checkbox
+                document.getElementById(`cuota-${idCuota}`).checked = !pagada;
+                alert('Error al actualizar el estado de la cuota');
+            });
+    }
+</script>
 {% endblock %}
