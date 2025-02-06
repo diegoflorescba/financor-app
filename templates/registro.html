@@ -130,8 +130,13 @@
                     <div id="datos_garante" style="display: none;">
                         <div class="form-group">
                             <label for="dni_garante" class="form-label">DNI Garante *</label>
-                            <input type="text" class="form-control form-control-lg" id="dni_garante" name="dni_garante"
-                                maxlength="8">
+                            <div class="d-flex">
+                                <input type="text" class="form-control form-control-lg" id="dni_garante"
+                                    name="dni_garante" maxlength="8">
+                                <button type="button" class="btn btn-primary ms-2" onclick="buscarGarante()">
+                                    Buscar
+                                </button>
+                            </div>
                         </div>
 
                         <div class="form-group">
@@ -430,5 +435,38 @@
             toggleSeccionGarante();
         }
     });
+
+    async function buscarGarante() {
+        const dniGarante = document.getElementById('dni_garante').value;
+        if (!dniGarante) {
+            alert('Por favor, ingrese un DNI para buscar');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/buscar_garante/${dniGarante}`);
+            const data = await response.json();
+
+            if (data.encontrado) {
+                // Autocompletar los campos con los datos del garante
+                document.getElementById('nombre_garante').value = data.garante.nombre;
+                document.getElementById('apellido_garante').value = data.garante.apellido;
+                document.getElementById('telefono_garante').value = data.garante.telefono || '';
+                document.getElementById('correo_garante').value = data.garante.correo_electronico || '';
+                document.getElementById('direccion_garante').value = data.garante.direccion || '';
+            } else {
+                alert('No se encontró un garante con ese DNI. Por favor, complete los datos manualmente.');
+                // Limpiar los campos para permitir el ingreso manual
+                document.getElementById('nombre_garante').value = '';
+                document.getElementById('apellido_garante').value = '';
+                document.getElementById('telefono_garante').value = '';
+                document.getElementById('correo_garante').value = '';
+                document.getElementById('direccion_garante').value = '';
+            }
+        } catch (error) {
+            console.error('Error al buscar garante:', error);
+            alert('Error al buscar garante. Por favor, intente nuevamente.');
+        }
+    }
 </script>
 {% endblock %}

@@ -1178,6 +1178,26 @@ def actualizar_estado_cuota():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/buscar_garante/<dni>')
+def buscar_garante(dni):
+    garante = Garante.query.filter_by(dni=dni).first()
+    
+    if garante:
+        return jsonify({
+            'encontrado': True,
+            'garante': {
+                'nombre': garante.nombre,
+                'apellido': garante.apellido,
+                'telefono': garante.telefono,
+                'correo_electronico': garante.correo_electronico,
+                'direccion': garante.direccion
+            }
+        })
+    else:
+        return jsonify({
+            'encontrado': False
+        })
+
 if __name__ == '__main__':
     # Inicializar la base de datos
     init_db()
