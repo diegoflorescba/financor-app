@@ -19,7 +19,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 # Configuración más segura para producción
 app.config.update(
-    SECRET_KEY='tu_clave_secreta',
+    SECRET_KEY='tu_clave_secreta_aqui',
     SQLALCHEMY_DATABASE_URI='sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'prestamos.db'),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SESSION_COOKIE_SECURE=True,
@@ -27,15 +27,13 @@ app.config.update(
     SESSION_COOKIE_SAMESITE='Lax',
 )
 
-# Inicializar la base de datos con la app
+# Inicializar la base de datos
 db.init_app(app)
 
-print("Inicialización de la base de datos completada")
-
-# Agregar este código para debug
-db_path = os.path.abspath('instance/prestamos.db')
-print(f"Ruta completa de la base de datos: {db_path}")
-print(f"¿Existe el archivo?: {os.path.exists(db_path)}")
+# Crear las tablas si no existen
+with app.app_context():
+    db.create_all()
+    print("Base de datos inicializada correctamente")
 
 # Configuración de la API BCRA
 BCRA_API_URL = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{}"
@@ -1269,9 +1267,9 @@ def admin():
                          garantes=garantes)
 
 if __name__ == '__main__':
-    # En desarrollo
+    print("Iniciando servidor de desarrollo...")
     app.run(debug=True)
 else:
-    # En producción
-    app.run()
+    # En producción, no intentar iniciar el servidor
+    print("Iniciando en modo producción")
 
