@@ -336,13 +336,17 @@
 
         // Función para generar vista previa de cuotas
         function generarCuotas() {
-            const fechaPrimeraCuota = fechaVencimientoPrimeraCuota.value;
-            const cantidadCuotas = parseInt(cuotasTotales.value) || 0;
-            const montoPorCuota = parseFloat(montoCuotas.value) || 0;
+            const fechaPrimeraCuota = document.getElementById('fecha_vencimiento_primera_cuota').value;
+            const cantidadCuotas = parseInt(document.getElementById('cuotas_totales').value) || 0;
+            const montoPorCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+            const tbody = document.getElementById('cuotas-body');
+            const fechaHoy = new Date();
+
+            // Establecer la hora a 00:00:00 para comparar solo fechas
+            fechaHoy.setHours(0, 0, 0, 0);
 
             if (!fechaPrimeraCuota || !cantidadCuotas || !montoPorCuota) return;
 
-            const tbody = document.getElementById('cuotas-body');
             tbody.innerHTML = '';
 
             const partesFecha = fechaPrimeraCuota.split('-');
@@ -356,6 +360,10 @@
                 const fechaCuota = new Date(fechaVencimiento);
                 fechaCuota.setMonth(fechaVencimiento.getMonth() + i);
 
+                // Determinar el estado de la cuota
+                const estado = fechaCuota < fechaHoy ? 'PAGADA' : 'PENDIENTE';
+                const estadoClass = estado === 'PAGADA' ? 'text-success' : 'text-danger';
+
                 const year = fechaCuota.getFullYear();
                 const month = String(fechaCuota.getMonth() + 1).padStart(2, '0');
                 const day = String(fechaCuota.getDate()).padStart(2, '0');
@@ -366,7 +374,7 @@
                     <td>${i + 1}</td>
                     <td>${fechaFormateada}</td>
                     <td>$${montoPorCuota.toFixed(2)}</td>
-                    <td>PENDIENTE</td>
+                    <td class="${estadoClass}"><strong>${estado}</strong></td>
                 `;
                 tbody.appendChild(row);
             }
