@@ -107,18 +107,20 @@ def registro():
                 fecha_primera_cuota = datetime.strptime(request.form['fecha_vencimiento_primera_cuota'], '%Y-%m-%d')
                 dia_vencimiento = fecha_primera_cuota.day
 
-                # Calcular montos
+                # Usar los valores ingresados directamente
                 monto_prestado = float(request.form['monto_prestado'])
-                tasa_interes = float(request.form['tasa_interes'])
+                monto_cuota = float(request.form['monto_cuotas'])
                 cuotas_totales = int(request.form['cuotas_totales'])
-                monto_total = monto_prestado * (1 + tasa_interes/100)
-                monto_cuota = round(monto_total / cuotas_totales, 2)
+                tasa_interes = float(request.form['tasa_interes'])
+                
+                # Calcular monto total basado en cuotas y monto por cuota
+                monto_total = monto_cuota * cuotas_totales
 
                 # Crear el préstamo
                 nuevo_prestamo = Prestamo(
                     id_cliente=nuevo_cliente.id_cliente,
                     monto_prestado=monto_prestado,
-                    tasa_interes=tasa_interes,
+                    tasa_interes=tasa_interes,  # Solo informativo
                     cuotas_totales=cuotas_totales,
                     cuotas_pendientes=cuotas_totales,
                     monto_cuotas=monto_cuota,

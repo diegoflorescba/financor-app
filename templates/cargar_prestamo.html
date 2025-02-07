@@ -252,22 +252,13 @@
     });
 
     function calcularMontos() {
-        const montoPrestado = parseFloat(document.getElementById('monto_prestado').value) || 0;
-        const tasaInteres = parseFloat(document.getElementById('tasa_interes').value) || 0;
-        const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 1;
+        const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
+        const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
 
-        // Calcular monto adeudado (capital + intereses)
-        const montoAdeudado = montoPrestado * (1 + (tasaInteres / 100));
-
-        // Calcular monto por cuota
-        const montoCuota = montoAdeudado / cuotasTotales;
-
-        // Actualizar campos
-        document.getElementById('monto_adeudado').value = montoAdeudado.toFixed(2);
-        document.getElementById('monto_cuotas').value = montoCuota.toFixed(2);
-
-        // Recalcular fecha de vencimiento si hay fecha de inicio
-        calcularFechaVencimiento();
+        if (cuotasTotales && montoCuota) {
+            const montoTotal = cuotasTotales * montoCuota;
+            document.getElementById('monto_adeudado').value = montoTotal.toFixed(2);
+        }
     }
 
     function calcularFechaVencimiento() {
@@ -289,13 +280,8 @@
     }
 
     function calcularMontoTotal() {
-        const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
-        const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
-
-        if (cuotasTotales && montoCuota) {
-            const montoTotal = cuotasTotales * montoCuota;
-            document.getElementById('monto_adeudado').value = montoTotal.toFixed(2);
-        }
+        const montoPrestado = parseFloat(document.getElementById('monto_prestado').value) || 0;
+        document.getElementById('monto_adeudado').value = montoPrestado.toFixed(2);
     }
 
     function formatearFecha(fecha) {
@@ -384,6 +370,7 @@
     }
 
     // Event listeners
+    document.getElementById('monto_prestado').addEventListener('change', calcularMontoTotal);
     document.getElementById('fecha_inicio').addEventListener('change', calcularFechaVencimiento);
     document.getElementById('fecha_vencimiento_primera_cuota').addEventListener('change', calcularFechaVencimiento);
     document.getElementById('cuotas_totales').addEventListener('change', function () {
@@ -391,24 +378,19 @@
         calcularFechaVencimiento();
     });
     document.getElementById('monto_cuotas').addEventListener('change', function () {
-        calcularMontoTotal();
+        calcularMontos();
         if (document.getElementById('fecha_vencimiento_primera_cuota').value) {
             generarCuotas();
         }
     });
 
     // Inicialización
-    document.addEventListener('DOMContentLoaded', function () {
-        // Calcular monto total inicial si hay valores
-        if (document.getElementById('cuotas_totales').value &&
-            document.getElementById('monto_cuotas').value) {
-            calcularMontoTotal();
-        }
-        // Generar tabla si hay fecha primera cuota
-        if (document.getElementById('fecha_vencimiento_primera_cuota').value) {
-            generarCuotas();
-        }
-    });
+    if (document.getElementById('monto_prestado').value) {
+        calcularMontoTotal();
+    }
+    if (document.getElementById('fecha_vencimiento_primera_cuota').value) {
+        generarCuotas();
+    }
 
     document.getElementById('tiene_garante').addEventListener('change', function () {
         const datosGarante = document.getElementById('datos_garante');

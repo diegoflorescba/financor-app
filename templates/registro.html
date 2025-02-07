@@ -296,12 +296,16 @@
         const tieneGarante = document.getElementById('tiene_garante');
         const datosGarante = document.getElementById('datos_garante');
 
-        // Función para calcular el monto total
+        // Función para calcular el monto total basado solo en el monto de cuota y cantidad de cuotas
         function calcularMontoTotal() {
-            const monto = parseFloat(montoCuotas.value) || 0;
-            const cuotas = parseInt(cuotasTotales.value) || 0;
-            const total = monto * cuotas;
-            montoAdeudado.value = total.toFixed(2);
+            const numCuotas = parseInt(document.getElementById('cuotas_totales').value) || 0;
+            const montoPorCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+
+            if (numCuotas && montoPorCuota) {
+                const total = numCuotas * montoPorCuota;
+                document.getElementById('monto_adeudado').value = total.toFixed(2);
+                generarCuotas();
+            }
         }
 
         // Función para calcular fecha de finalización
@@ -310,39 +314,33 @@
             const cantidadCuotas = parseInt(cuotasTotales.value) || 0;
 
             if (fechaPrimeraCuota && cantidadCuotas) {
-                // Crear fecha base usando el string de fecha
                 const partesFecha = fechaPrimeraCuota.split('-');
                 const fechaBase = new Date(
-                    parseInt(partesFecha[0]),    // año
-                    parseInt(partesFecha[1]) - 1, // mes (0-11)
-                    parseInt(partesFecha[2])      // día
+                    parseInt(partesFecha[0]),
+                    parseInt(partesFecha[1]) - 1,
+                    parseInt(partesFecha[2])
                 );
 
-                // Calcular fecha de finalización
                 const fechaFin = new Date(fechaBase);
                 fechaFin.setMonth(fechaBase.getMonth() + (cantidadCuotas - 1));
 
-                // Formatear fecha manteniendo el día original
                 const year = fechaFin.getFullYear();
                 const month = String(fechaFin.getMonth() + 1).padStart(2, '0');
                 const day = String(fechaBase.getDate()).padStart(2, '0');
 
                 fechaFinalizacion.value = `${year}-${month}-${day}`;
-
-                // Generar vista previa de cuotas
                 generarCuotas();
             }
         }
 
         // Función para generar vista previa de cuotas
         function generarCuotas() {
-            const fechaPrimeraCuota = document.getElementById('fecha_vencimiento_primera_cuota').value;
-            const cantidadCuotas = parseInt(document.getElementById('cuotas_totales').value) || 0;
-            const montoPorCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+            const fechaPrimeraCuota = fechaVencimientoPrimeraCuota.value;
+            const cantidadCuotas = parseInt(cuotasTotales.value) || 0;
+            const montoPorCuota = parseFloat(montoCuotas.value) || 0;
             const tbody = document.getElementById('cuotas-body');
             const fechaHoy = new Date();
 
-            // Establecer la hora a 00:00:00 para comparar solo fechas
             fechaHoy.setHours(0, 0, 0, 0);
 
             if (!fechaPrimeraCuota || !cantidadCuotas || !montoPorCuota) return;
@@ -360,7 +358,6 @@
                 const fechaCuota = new Date(fechaVencimiento);
                 fechaCuota.setMonth(fechaVencimiento.getMonth() + i);
 
-                // Determinar el estado de la cuota
                 const estado = fechaCuota < fechaHoy ? 'PAGADA' : 'PENDIENTE';
                 const estadoClass = estado === 'PAGADA' ? 'text-success' : 'text-danger';
 
@@ -406,14 +403,16 @@
         }
 
         // Event Listeners
-        if (montoCuotas) {
-            montoCuotas.addEventListener('input', calcularMontoTotal);
-        }
-
         if (cuotasTotales) {
-            cuotasTotales.addEventListener('input', () => {
+            cuotasTotales.addEventListener('input', function () {
                 calcularMontoTotal();
                 calcularFechaFinalizacion();
+            });
+        }
+
+        if (montoCuotas) {
+            montoCuotas.addEventListener('input', function () {
+                calcularMontoTotal();
             });
         }
 
@@ -422,7 +421,7 @@
         }
 
         // Calcular valores iniciales si hay datos
-        if (montoCuotas.value && cuotasTotales.value) {
+        if (cuotasTotales.value && montoCuotas.value) {
             calcularMontoTotal();
         }
         if (fechaVencimientoPrimeraCuota.value && cuotasTotales.value) {
@@ -432,14 +431,12 @@
         // Event listener para el checkbox de préstamo
         if (tienePrestamo) {
             tienePrestamo.addEventListener('change', toggleSeccionesPrestamo);
-            // Ejecutar al cargar para establecer el estado inicial
             toggleSeccionesPrestamo();
         }
 
         // Event listener para el checkbox del garante
         if (tieneGarante) {
             tieneGarante.addEventListener('change', toggleSeccionGarante);
-            // Ejecutar al cargar para establecer el estado inicial
             toggleSeccionGarante();
         }
     });
