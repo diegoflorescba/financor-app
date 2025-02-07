@@ -40,13 +40,6 @@ if [ "$PYTHON_VERSION" != "$REQUIRED_VERSION" ]; then
     # Instalar Python 3.10.13
     pyenv install $REQUIRED_VERSION
     pyenv global $REQUIRED_VERSION
-    
-    # Verificar la instalación
-    PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
-    if [ "$PYTHON_VERSION" != "$REQUIRED_VERSION" ]; then
-        echo -e "${RED}Error: No se pudo instalar Python $REQUIRED_VERSION${NC}"
-        exit 1
-    fi
 fi
 
 echo -e "${GREEN}Python $REQUIRED_VERSION está instalado correctamente${NC}"
@@ -59,19 +52,33 @@ if ! command -v pip3 &> /dev/null; then
     rm get-pip.py
 fi
 
-# Crear entorno virtual si no existe
-if [ ! -d "venv" ]; then
-    echo -e "${BLUE}Creando entorno virtual...${NC}"
-    python3 -m venv venv
+# Eliminar el entorno virtual existente si hay problemas
+if [ -d "venv" ]; then
+    echo -e "${BLUE}Eliminando entorno virtual anterior...${NC}"
+    rm -rf venv
+fi
+
+# Crear nuevo entorno virtual
+echo -e "${BLUE}Creando nuevo entorno virtual...${NC}"
+python3 -m venv venv
+
+# Verificar si el entorno virtual se creó correctamente
+if [ ! -f "venv/bin/python3" ]; then
+    echo -e "${RED}Error: No se pudo crear el entorno virtual${NC}"
+    exit 1
 fi
 
 # Activar entorno virtual
 echo -e "${BLUE}Activando entorno virtual...${NC}"
 source venv/bin/activate
 
+# Actualizar pip en el entorno virtual
+echo -e "${BLUE}Actualizando pip...${NC}"
+python3 -m pip install --upgrade pip
+
 # Instalar dependencias
 echo -e "${BLUE}Instalando dependencias...${NC}"
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 
 # Crear carpeta instance si no existe
 if [ ! -d "instance" ]; then

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from datetime import datetime, date, timedelta
 from calendar import monthrange
@@ -10,7 +8,7 @@ import pandas as pd
 import io
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from sqlalchemy import or_, inspect, text
+from sqlalchemy import or_, inspect, text, func
 import locale
 
 
@@ -26,24 +24,6 @@ app.secret_key = 'tu_clave_secreta'
 
 # Inicializar la base de datos con la app
 db.init_app(app)
-
-# Crear todas las tablas
-with app.app_context():
-    print("Iniciando creación de base de datos...")
-
-    # Verificar si el archivo de base de datos existe y eliminarlo
-    db_path = 'instance/prestamos.db'
-    if not os.path.exists(db_path):
-        print("Creando todas las tablas...")
-        db.create_all()
-
-        print("Verificando estructura de las tablas...")
-        # Imprimir todas las tablas creadas
-        for table in db.metadata.tables.keys():
-            print(f"Tabla creada: {table}")
-            # Imprimir columnas de cada tabla
-            for column in db.metadata.tables[table].columns:
-                print(f"  - Columna: {column.name}, Tipo: {column.type}")
 
 print("Inicialización de la base de datos completada")
 
@@ -83,7 +63,6 @@ def nuevo_cliente():
                 fecha_registro=datetime.now(),
                 activo=bool(request.form.get('activo', True))
             )
-
             db.session.add(nuevo_cliente)
             db.session.commit()
             flash('Cliente registrado exitosamente', 'success')
@@ -99,71 +78,103 @@ def nuevo_cliente():
 @app.route('/registro', methods=['GET', 'POST'])
 def registro():
     if request.method == 'POST':
-        print("Método POST recibido")
-        print("Datos del formulario:", request.form)
-        
         try:
-            # Verificar si el cliente ya existe por DNI
+            # Verificar si ya existe un cliente con ese DNI
             dni = request.form['dni']
             cliente_existente = Cliente.query.filter_by(dni=dni).first()
-            
             if cliente_existente:
                 flash('Ya existe un cliente registrado con ese DNI', 'error')
                 return redirect(url_for('registro'))
 
-            # Verificar si existe por correo electrónico (si se proporcionó)
-            correo = request.form.get('correo_electronico')
-            if correo:
-                cliente_existente = Cliente.query.filter_by(correo_electronico=correo).first()
-                if cliente_existente:
-                    flash('Ya existe un cliente registrado con ese correo electrónico', 'error')
-                    return redirect(url_for('registro'))
-
-            # Si no existe, crear el nuevo cliente
+            # Crear cliente
             nuevo_cliente = Cliente(
                 nombre=request.form['nombre'],
                 apellido=request.form['apellido'],
                 dni=dni,
-                telefono=request.form.get('telefono', ''),
-                correo_electronico=correo,
-                direccion=request.form.get('direccion', ''),
-                documentacion_verificada='documentacion_verificada' in request.form,
-                activo=True
+                telefono=request.form['telefono'],
+                correo_electronico=request.form['correo_electronico'],
+                direccion=request.form['direccion']
             )
-            
-            print("Cliente creado:", nuevo_cliente)
             db.session.add(nuevo_cliente)
             db.session.flush()  # Para obtener el id_cliente
 
+            # Si se incluye préstamo
             if 'tiene_prestamo' in request.form:
-                print("Creando préstamo...")
-                # Crear préstamo
+                fecha_inicio = datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d')
+                fecha_primera_cuota = datetime.strptime(request.form['fecha_vencimiento_primera_cuota'], '%Y-%m-%d')
+                dia_vencimiento = fecha_primera_cuota.day
+
+                # Calcular montos
+                monto_prestado = float(request.form['monto_prestado'])
+                tasa_interes = float(request.form['tasa_interes'])
+                cuotas_totales = int(request.form['cuotas_totales'])
+                monto_total = monto_prestado * (1 + tasa_interes/100)
+                monto_cuota = round(monto_total / cuotas_totales, 2)
+
+                # Crear el préstamo
                 nuevo_prestamo = Prestamo(
                     id_cliente=nuevo_cliente.id_cliente,
-                    monto_prestado=float(request.form['monto_prestado']),
-                    tasa_interes=float(request.form['tasa_interes']),
-                    cuotas_totales=int(request.form['cuotas_totales']),
-                    cuotas_pendientes=int(request.form['cuotas_totales']),
-                    monto_cuotas=float(request.form['monto_cuotas']),
-                    monto_adeudado=float(request.form['monto_adeudado']),
-                    fecha_inicio=datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d'),
-                    fecha_finalizacion=datetime.strptime(request.form['fecha_finalizacion'], '%Y-%m-%d'),
+                    monto_prestado=monto_prestado,
+                    tasa_interes=tasa_interes,
+                    cuotas_totales=cuotas_totales,
+                    cuotas_pendientes=cuotas_totales,
+                    monto_cuotas=monto_cuota,
+                    monto_adeudado=monto_total,
+                    fecha_inicio=fecha_inicio,
+                    fecha_finalizacion=fecha_primera_cuota + relativedelta(months=cuotas_totales-1),
                     estado='ACTIVO'
                 )
-                
-                print("Préstamo creado:", nuevo_prestamo)
-                db.session.add(nuevo_prestamo)
 
-                # Verificar si hay garante
+                db.session.add(nuevo_prestamo)
+                db.session.flush()
+
+                # Crear las cuotas
+                hoy = datetime.now().date()
+                cuotas_pagadas = 0
+                monto_pagado = 0
+
+                for i in range(cuotas_totales):
+                    # Calcular fecha de vencimiento manteniendo el mismo día
+                    if i == 0:
+                        fecha_vencimiento = fecha_primera_cuota
+                    else:
+                        # Usar relativedelta para mantener el mismo día del mes
+                        fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
+                        # Asegurar que se mantenga el día de vencimiento
+                        fecha_vencimiento = fecha_vencimiento.replace(day=dia_vencimiento)
+                    
+                    # Verificar si la cuota ya venció
+                    esta_pagada = fecha_vencimiento.date() < hoy
+                    
+                    nueva_cuota = Cuota(
+                        id_prestamo=nuevo_prestamo.id_prestamo,
+                        numero_cuota=i + 1,
+                        fecha_vencimiento=fecha_vencimiento,
+                        monto=monto_cuota,
+                        monto_pagado=monto_cuota if esta_pagada else 0.0,
+                        pagada=esta_pagada,
+                        estado='PAGADA' if esta_pagada else 'PENDIENTE',
+                        fecha_pago=datetime.now() if esta_pagada else None
+                    )
+                    
+                    if esta_pagada:
+                        cuotas_pagadas += 1
+                        monto_pagado += monto_cuota
+                    
+                    db.session.add(nueva_cuota)
+
+                # Actualizar el préstamo con las cuotas pagadas
+                nuevo_prestamo.cuotas_pendientes = cuotas_totales - cuotas_pagadas
+                nuevo_prestamo.monto_adeudado = monto_total - monto_pagado
+
+                # Si todas las cuotas están pagadas, marcar el préstamo como finalizado
+                if cuotas_pagadas == cuotas_totales:
+                    nuevo_prestamo.estado = 'FINALIZADO'
+                    nuevo_prestamo.fecha_finalizacion = datetime.now()
+
+                # Procesar garante si está incluido
                 if 'tiene_garante' in request.form:
-                    print("Procesando garante...")
                     dni_garante = request.form['dni_garante']
-                    
-                    # Verificar que el garante no sea el mismo cliente
-                    if dni_garante == dni:
-                        flash('El garante no puede ser el mismo cliente', 'error')
-                        return redirect(url_for('registro'))
-                    
                     garante = Garante.query.filter_by(dni=dni_garante).first()
 
                     if not garante:
@@ -180,41 +191,16 @@ def registro():
                         )
                         db.session.add(garante)
                         db.session.flush()
-                        print("Nuevo garante creado:", garante)
 
-                    # Asociar garante al préstamo
                     nuevo_prestamo.id_garante = garante.id_garante
 
-                # Calcular fecha de primera cuota
-                fecha_inicio = datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d')
-                fecha_primera_cuota = datetime(fecha_inicio.year, fecha_inicio.month, 10)
-                
-                # Si la fecha es después del 10, la primera cuota será el 10 del mes siguiente
-                if fecha_inicio.day > 10:
-                    fecha_primera_cuota = fecha_primera_cuota + relativedelta(months=1)
-
-                # Crear las cuotas
-                for i in range(nuevo_prestamo.cuotas_totales):
-                    fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
-                    
-                    nueva_cuota = Cuota(
-                        id_prestamo=nuevo_prestamo.id_prestamo,
-                        numero_cuota=i + 1,
-                        fecha_vencimiento=fecha_vencimiento,
-                        monto=nuevo_prestamo.monto_cuotas,
-                        estado='PENDIENTE'
-                    )
-                    db.session.add(nueva_cuota)
-
             db.session.commit()
-            print("Commit exitoso")
             flash('Cliente registrado exitosamente', 'success')
             return redirect(url_for('clientes'))
 
         except Exception as e:
             db.session.rollback()
-            print("Error en el registro:", str(e))
-            flash(f'Error al registrar el cliente: {str(e)}', 'error')
+            flash(f'Error al registrar cliente: {str(e)}', 'error')
             return redirect(url_for('registro'))
 
     return render_template('registro.html')
@@ -239,8 +225,15 @@ def reportes():
         Prestamo.monto_adeudado > 0
     ).all()
     
-    # Calcular el total adeudado general
-    total_adeudado = sum(prestamo.monto_adeudado for prestamo in prestamos)
+    # Modificar el cálculo del total adeudado para solo incluir cuotas pendientes
+    total_adeudado = db.session.query(
+        func.sum(Cuota.monto - Cuota.monto_pagado)
+    ).join(
+        Prestamo, Cuota.id_prestamo == Prestamo.id_prestamo
+    ).filter(
+        Cuota.estado == 'PENDIENTE',
+        Prestamo.estado == 'ACTIVO'
+    ).scalar() or 0
     
     # Calcular el adeudado del mes actual
     adeudado_mes_actual = db.session.query(db.func.sum(Cuota.monto))\
@@ -392,7 +385,7 @@ def exportar_excel():
                 'Cuota': f"{cuota.numero_cuota}/{cuota.prestamo.cuotas_totales}",
                 'Vencimiento': cuota.fecha_vencimiento.strftime('%d/%m/%Y'),
                 'Monto': f"${cuota.monto:,.2f}",
-                'Estado': 'Pendiente' if not cuota.pagada else 'Pagada'
+                'Estado': 'PENDIENTE' if not cuota.pagada else 'PAGADA'
             })
 
         # Crear Excel
@@ -521,56 +514,118 @@ def crear_prestamo():
         monto_prestado = float(request.form['monto'])
         tasa_interes = float(request.form['tasa_interes'])
         cuotas_totales = int(request.form['cuotas'])
+        
+        # Verificar si hay garante
+        tiene_garante = 'tiene_garante' in request.form and request.form['tiene_garante'] == 'on'
+        id_garante = None
+
+        if tiene_garante:
+            try:
+                # Crear o buscar garante solo si se marcó la opción
+                dni_garante = request.form.get('dni_garante')
+                if dni_garante:
+                    garante = Garante.query.filter_by(dni=dni_garante).first()
+                    if not garante:
+                        garante = Garante(
+                            nombre=request.form.get('nombre_garante', ''),
+                            apellido=request.form.get('apellido_garante', ''),
+                            dni=dni_garante,
+                            telefono=request.form.get('telefono_garante', ''),
+                            correo_electronico=request.form.get('correo_garante', ''),
+                            direccion=request.form.get('direccion_garante', ''),
+                            documentacion_verificada=True,
+                            activo=True
+                        )
+                        db.session.add(garante)
+                        db.session.flush()
+                    id_garante = garante.id_garante
+            except Exception as e:
+                print(f"Error al procesar garante: {str(e)}")
+                id_garante = None
+
+        # Convertir la fecha de inicio del string a objeto datetime
+        fecha_inicio = datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d')
+        hoy = datetime.now()
 
         # Calcular fecha primer vencimiento (día 10 del mes siguiente)
-        hoy = datetime.now()
-        if hoy.month == 12:
-            primer_vencimiento = datetime(hoy.year + 1, 1, 10)
+        if fecha_inicio.month == 12:
+            primer_vencimiento = datetime(fecha_inicio.year + 1, 1, 10)
         else:
-            primer_vencimiento = datetime(hoy.year, hoy.month + 1, 10)
+            primer_vencimiento = datetime(fecha_inicio.year, fecha_inicio.month + 1, 10)
 
         # Calcular montos
         monto_total = monto_prestado * (1 + tasa_interes/100)
         monto_cuota = round(monto_total / cuotas_totales, 2)
 
-        # Calcular fecha de vencimiento final del préstamo
-        fecha_finalizacion_final = primer_vencimiento + relativedelta(months=cuotas_totales-1)
-
-        # Crear el préstamo
+        # Crear el préstamo primero y asegurarse de que se guarde
         nuevo_prestamo = Prestamo(
             id_cliente=id_cliente,
+            id_garante=id_garante,  # Puede ser None
             monto_prestado=monto_prestado,
             tasa_interes=tasa_interes,
             cuotas_totales=cuotas_totales,
             cuotas_pendientes=cuotas_totales,
             monto_cuotas=monto_cuota,
             monto_adeudado=monto_total,
-            fecha_inicio=hoy,
-            fecha_finalizacion=fecha_finalizacion_final,
+            fecha_inicio=fecha_inicio,
+            fecha_finalizacion=primer_vencimiento + relativedelta(months=cuotas_totales-1),
             estado='ACTIVO'
         )
 
         db.session.add(nuevo_prestamo)
-        db.session.flush()
+        db.session.flush()  # Asegurarse de que el préstamo tenga ID antes de crear las cuotas
 
+        # Verificar que el préstamo tiene ID
+        if not nuevo_prestamo.id_prestamo:
+            raise ValueError("Error al generar ID del préstamo")
+
+        # Usar la fecha de primera cuota del formulario
+        fecha_primera_cuota = datetime.strptime(request.form['fecha_primera_cuota'], '%Y-%m-%d')
+        dia_vencimiento = fecha_primera_cuota.day
+        
         # Crear las cuotas
-        for i in range(cuotas_totales):
-            if i == 0:
-                fecha_vencimiento = primer_vencimiento
-            else:
-                fecha_vencimiento = primer_vencimiento + relativedelta(months=i)
+        hoy = datetime.now().date()
+        cuotas_pagadas = 0
+        monto_pagado = 0
 
+        for i in range(nuevo_prestamo.cuotas_totales):
+            # Calcular fecha de vencimiento manteniendo el mismo día
+            if i == 0:
+                fecha_vencimiento = fecha_primera_cuota
+            else:
+                # Usar relativedelta para mantener el mismo día del mes
+                fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
+                # Asegurar que se mantenga el día de vencimiento
+                fecha_vencimiento = fecha_vencimiento.replace(day=dia_vencimiento)
+            
+            # Verificar si la cuota ya venció
+            esta_pagada = fecha_vencimiento.date() < hoy
+            
             nueva_cuota = Cuota(
+                id_prestamo=nuevo_prestamo.id_prestamo,
                 numero_cuota=i + 1,
                 fecha_vencimiento=fecha_vencimiento,
-                monto=monto_cuota,
-                monto_pagado=0.0,
-                pagada=False,
-                estado='PENDIENTE',
-                id_prestamo=nuevo_prestamo.id_prestamo
+                monto=nuevo_prestamo.monto_cuotas,
+                monto_pagado=nuevo_prestamo.monto_cuotas if esta_pagada else 0.0,
+                pagada=esta_pagada,
+                estado='PAGADA' if esta_pagada else 'PENDIENTE',
+                fecha_pago=datetime.now() if esta_pagada else None
             )
-
+            
+            if esta_pagada:
+                cuotas_pagadas += 1
+                monto_pagado += nuevo_prestamo.monto_cuotas
+            
             db.session.add(nueva_cuota)
+
+        # Actualizar el préstamo con las cuotas pagadas
+        nuevo_prestamo.cuotas_pendientes = nuevo_prestamo.cuotas_totales - cuotas_pagadas
+        nuevo_prestamo.monto_adeudado = nuevo_prestamo.monto_adeudado - monto_pagado
+
+        # Si todas las cuotas están pagadas, marcar el préstamo como finalizado
+        if cuotas_pagadas == nuevo_prestamo.cuotas_totales:
+            nuevo_prestamo.estado = 'FINALIZADO'
+            nuevo_prestamo.fecha_finalizacion = datetime.now()
 
         db.session.commit()
         flash('Préstamo creado exitosamente', 'success')
@@ -578,6 +633,7 @@ def crear_prestamo():
     except Exception as e:
         db.session.rollback()
         flash(f'Error al crear el préstamo: {str(e)}', 'error')
+        print(f"Error detallado: {str(e)}")  # Para debugging
 
     return redirect(url_for('prestamos'))
 
@@ -692,7 +748,7 @@ def ver_cuotas(prestamo_id):
         - ID: {cuota.id_cuota}
         - Vencimiento: {cuota.fecha_vencimiento.strftime('%d/%m/%Y')}
         - Monto: ${cuota.monto:,.2f}
-        - Estado: {'Pagada' if cuota.pagada else 'Pendiente'}
+        - Estado: {'PAGADA' if cuota.pagada else 'PENDIENTE'}
         """
 
     return f"<pre>{debug_info}</pre>"
@@ -907,12 +963,70 @@ def cargar_prestamo(id_cliente):
 @app.route('/guardar_prestamo', methods=['POST'])
 def guardar_prestamo():
     try:
-        # Verificar si hay garante
-        tiene_garante = 'tiene_garante' in request.form
-        id_garante = None
+        # Obtener datos del formulario
+        id_cliente = request.form['id_cliente']
+        monto_prestado = float(request.form['monto_prestado'])
+        tasa_interes = float(request.form['tasa_interes'])
+        cuotas_totales = int(request.form['cuotas_totales'])
+        monto_cuotas = float(request.form['monto_cuotas'])
+        monto_adeudado = float(request.form['monto_adeudado'])
+        fecha_inicio = datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d')
+        fecha_vencimiento_primera_cuota = datetime.strptime(request.form['fecha_vencimiento_primera_cuota'], '%Y-%m-%d')
 
-        if tiene_garante:
-            # Buscar si ya existe un garante con ese DNI
+        # Crear el préstamo
+        nuevo_prestamo = Prestamo(
+            id_cliente=id_cliente,
+            monto_prestado=monto_prestado,
+            tasa_interes=tasa_interes,
+            cuotas_totales=cuotas_totales,
+            cuotas_pendientes=cuotas_totales,
+            monto_cuotas=monto_cuotas,
+            monto_adeudado=monto_adeudado,
+            fecha_inicio=fecha_inicio,
+            fecha_finalizacion=None,
+            estado='ACTIVO'
+        )
+        
+        db.session.add(nuevo_prestamo)
+        db.session.flush()  # Para obtener el id_prestamo
+
+        # Crear las cuotas usando la fecha de vencimiento de la primera cuota
+        fecha_actual = datetime.now().date()
+        fecha_primera_cuota = fecha_vencimiento_primera_cuota.date()
+        
+        cuotas_pagadas = 0
+        monto_pagado = 0
+        
+        for i in range(cuotas_totales):
+            fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
+            
+            # Determinar si la cuota ya está vencida
+            esta_pagada = fecha_vencimiento < fecha_actual
+            
+            cuota = Cuota(
+                id_prestamo=nuevo_prestamo.id_prestamo,
+                numero_cuota=i + 1,
+                monto=monto_cuotas,
+                fecha_vencimiento=fecha_vencimiento,
+                estado='PAGADA' if esta_pagada else 'PENDIENTE',
+                monto_pagado=monto_cuotas if esta_pagada else 0,
+                pagada=esta_pagada,
+                fecha_pago=datetime.now() if esta_pagada else None
+            )
+            
+            if esta_pagada:
+                cuotas_pagadas += 1
+                monto_pagado += monto_cuotas
+            
+            db.session.add(cuota)
+
+        # Actualizar el préstamo con las cuotas pagadas
+        nuevo_prestamo.cuotas_pendientes = cuotas_totales - cuotas_pagadas
+        nuevo_prestamo.monto_adeudado = monto_adeudado - monto_pagado
+
+        # Procesar garante si está incluido
+        if 'tiene_garante' in request.form:
+            # Verificar si ya existe un garante con ese DNI
             dni_garante = request.form['dni_garante']
             garante = Garante.query.filter_by(dni=dni_garante).first()
 
@@ -933,53 +1047,17 @@ def guardar_prestamo():
 
             id_garante = garante.id_garante
 
-        # Crear el préstamo con o sin garante
-        nuevo_prestamo = Prestamo(
-            id_cliente=request.form['id_cliente'],
-            id_garante=id_garante,  # Será None si no hay garante
-            monto_prestado=float(request.form['monto_prestado']),
-            tasa_interes=float(request.form['tasa_interes']),
-            cuotas_totales=int(request.form['cuotas_totales']),
-            cuotas_pendientes=int(request.form['cuotas_totales']),
-            monto_cuotas=float(request.form['monto_cuotas']),
-            monto_adeudado=float(request.form['monto_adeudado']),
-            fecha_inicio=datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d'),
-            fecha_finalizacion=datetime.strptime(request.form['fecha_finalizacion'], '%Y-%m-%d'),
-            estado='ACTIVO'
-        )
-
-        db.session.add(nuevo_prestamo)
-        db.session.flush()  # Para obtener el id_prestamo
-
-        # Calcular fecha de primera cuota
-        fecha_inicio = datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d')
-        fecha_primera_cuota = datetime(fecha_inicio.year, fecha_inicio.month, 10)
-        
-        # Si la fecha es después del 10, la primera cuota será el 10 del mes siguiente
-        if fecha_inicio.day > 10:
-            fecha_primera_cuota = fecha_primera_cuota + relativedelta(months=1)
-
-        # Crear las cuotas
-        for i in range(nuevo_prestamo.cuotas_totales):
-            fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
-            
-            nueva_cuota = Cuota(
-                id_prestamo=nuevo_prestamo.id_prestamo,
-                numero_cuota=i + 1,
-                fecha_vencimiento=fecha_vencimiento,
-                monto=nuevo_prestamo.monto_cuotas,
-                estado='PENDIENTE'
-            )
-            db.session.add(nueva_cuota)
+            # Actualizar el préstamo con el nuevo garante
+            nuevo_prestamo.id_garante = id_garante
 
         db.session.commit()
-        flash('Préstamo registrado exitosamente', 'success')
+        flash('Préstamo guardado exitosamente', 'success')
         return redirect(url_for('prestamos'))
 
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al registrar el préstamo: {str(e)}', 'error')
-        return redirect(url_for('cargar_prestamo', id_cliente=request.form['id_cliente']))
+        flash(f'Error al guardar el préstamo: {str(e)}', 'error')
+        return redirect(url_for('prestamos'))
 
 
 @app.route('/eliminar_cliente/<int:id>', methods=['POST'])
@@ -1091,6 +1169,7 @@ def cleanup_db():
             conn.execute(text("DELETE FROM cuota"))
             conn.execute(text("DELETE FROM prestamo"))
             conn.execute(text("DELETE FROM cliente"))
+            conn.execute(text("DELETE FROM garante"))
             
             # Reactivar las restricciones de clave foránea
             conn.execute(text("PRAGMA foreign_keys = ON"))
@@ -1103,6 +1182,91 @@ def cleanup_db():
     except Exception as e:
         return f"Error limpiando la base de datos: {str(e)}"
 
+def init_db():
+    """Función para inicializar/verificar la base de datos"""
+    print("Iniciando verificación de la base de datos...")
+    
+    # db_path = 'instance/prestamos.db'
+    
+    try:
+        # Verificar si las tablas existen usando la sintaxis moderna
+        with app.app_context():
+            with db.engine.connect() as conn:
+                # Intentar hacer una consulta simple para verificar si la DB existe y tiene la estructura correcta
+                conn.execute(text("SELECT 1 FROM cliente"))
+                print("Base de datos existente verificada correctamente!")
+                
+    except Exception as e:
+        print(f"La base de datos necesita ser inicializada: {str(e)}")
+        
+        with app.app_context():
+            # Crear directorio instance si no existe
+            if not os.path.exists('instance'):
+                print("Creando directorio instance...")
+                os.makedirs('instance')
+            
+            print("Creando nuevas tablas...")
+            db.create_all()
+            print("Base de datos inicializada exitosamente!")
+
+@app.route('/actualizar_estado_cuota', methods=['POST'])
+def actualizar_estado_cuota():
+    try:
+        data = request.get_json()
+        id_cuota = data.get('id_cuota')
+        pagada = data.get('pagada')
+
+        # Cambiar query.get() por db.session.get()
+        cuota = db.session.get(Cuota, id_cuota)
+        
+        if cuota:
+            cuota.pagada = pagada
+            cuota.estado = 'PAGADA' if pagada else 'PENDIENTE'
+            db.session.commit()
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'Cuota no encontrada'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/buscar_garante/<dni>')
+def buscar_garante(dni):
+    garante = Garante.query.filter_by(dni=dni).first()
+    
+    if garante:
+        return jsonify({
+            'encontrado': True,
+            'garante': {
+                'nombre': garante.nombre,
+                'apellido': garante.apellido,
+                'telefono': garante.telefono,
+                'correo_electronico': garante.correo_electronico,
+                'direccion': garante.direccion
+            }
+        })
+    else:
+        return jsonify({
+            'encontrado': False
+        })
+
+@app.route('/admin')
+def admin():
+    # Obtener todos los datos de cada tabla
+    clientes = Cliente.query.all()
+    prestamos = Prestamo.query.all()
+    cuotas = Cuota.query.all()
+    garantes = Garante.query.all()
+
+    return render_template('admin.html', 
+                         clientes=clientes,
+                         prestamos=prestamos,
+                         cuotas=cuotas,
+                         garantes=garantes)
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Inicializar la base de datos
+    init_db()
+    
+    # Iniciar la aplicación
+    app.run(debug=True, host='0.0.0.0', port=8080)
 
