@@ -63,7 +63,6 @@ def nuevo_cliente():
                 fecha_registro=datetime.now(),
                 activo=bool(request.form.get('activo', True))
             )
-
             db.session.add(nuevo_cliente)
             db.session.commit()
             flash('Cliente registrado exitosamente', 'success')
@@ -948,7 +947,7 @@ def guardar_prestamo():
             monto_cuotas=monto_cuotas,
             monto_adeudado=monto_adeudado,
             fecha_inicio=fecha_inicio,
-            fecha_finalizacion=None,  # Se actualizará después
+            fecha_finalizacion=None,
             estado='ACTIVO'
         )
         
@@ -956,28 +955,38 @@ def guardar_prestamo():
         db.session.flush()  # Para obtener el id_prestamo
 
         # Crear las cuotas usando la fecha de vencimiento de la primera cuota
+        fecha_actual = datetime.now().date()
+        fecha_primera_cuota = fecha_vencimiento_primera_cuota.date()
+        
+        cuotas_pagadas = 0
+        monto_pagado = 0
+        
         for i in range(cuotas_totales):
-            # Para la primera cuota usar la fecha exacta del formulario
-            if i == 0:
-                fecha_vencimiento = fecha_vencimiento_primera_cuota
-            else:
-                # Para las siguientes cuotas, agregar meses a la fecha de primera cuota
-                fecha_vencimiento = fecha_vencimiento_primera_cuota + relativedelta(months=i)
-
-            nueva_cuota = Cuota(
+            fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
+            
+            # Determinar si la cuota ya está vencida
+            esta_pagada = fecha_vencimiento < fecha_actual
+            
+            cuota = Cuota(
                 id_prestamo=nuevo_prestamo.id_prestamo,
                 numero_cuota=i + 1,
-                fecha_vencimiento=fecha_vencimiento,
                 monto=monto_cuotas,
-                monto_pagado=0.0,
-                pagada=False,
-                estado='PENDIENTE'
+                fecha_vencimiento=fecha_vencimiento,
+                estado='PAGADA' if esta_pagada else 'PENDIENTE',
+                monto_pagado=monto_cuotas if esta_pagada else 0,
+                pagada=esta_pagada,
+                fecha_pago=datetime.now() if esta_pagada else None
             )
-            db.session.add(nueva_cuota)
+            
+            if esta_pagada:
+                cuotas_pagadas += 1
+                monto_pagado += monto_cuotas
+            
+            db.session.add(cuota)
 
-        # Actualizar la fecha de finalización con la fecha de la última cuota
-        ultima_fecha = fecha_vencimiento_primera_cuota + relativedelta(months=cuotas_totales - 1)
-        nuevo_prestamo.fecha_finalizacion = ultima_fecha
+        # Actualizar el préstamo con las cuotas pagadas
+        nuevo_prestamo.cuotas_pendientes = cuotas_totales - cuotas_pagadas
+        nuevo_prestamo.monto_adeudado = monto_adeudado - monto_pagado
 
         # Procesar garante si está incluido
         if 'tiene_garante' in request.form:
@@ -1124,6 +1133,7 @@ def cleanup_db():
             conn.execute(text("DELETE FROM cuota"))
             conn.execute(text("DELETE FROM prestamo"))
             conn.execute(text("DELETE FROM cliente"))
+            conn.execute(text("DELETE FROM garante"))
             
             # Reactivar las restricciones de clave foránea
             conn.execute(text("PRAGMA foreign_keys = ON"))
@@ -1137,35 +1147,31 @@ def cleanup_db():
         return f"Error limpiando la base de datos: {str(e)}"
 
 def init_db():
-    """Función para inicializar/actualizar la base de datos"""
+    """Función para inicializar/verificar la base de datos"""
     print("Iniciando verificación de la base de datos...")
     
-    db_path = 'instance/prestamos.db'
-    should_recreate = False
+    # db_path = 'instance/prestamos.db'
     
     try:
         # Verificar si las tablas existen usando la sintaxis moderna
         with app.app_context():
             with db.engine.connect() as conn:
+                # Intentar hacer una consulta simple para verificar si la DB existe y tiene la estructura correcta
                 conn.execute(text("SELECT 1 FROM cliente"))
+                print("Base de datos existente verificada correctamente!")
+                
     except Exception as e:
-        print(f"Error al acceder a la base de datos: {str(e)}")
-        print("Se recreará la base de datos...")
-        should_recreate = True
-    
-    if should_recreate:
+        print(f"La base de datos necesita ser inicializada: {str(e)}")
+        
         with app.app_context():
-            if os.path.exists(db_path):
-                print(f"Eliminando base de datos existente: {db_path}")
-                os.remove(db_path)
-            
+            # Crear directorio instance si no existe
             if not os.path.exists('instance'):
                 print("Creando directorio instance...")
                 os.makedirs('instance')
             
             print("Creando nuevas tablas...")
             db.create_all()
-            print("Base de datos actualizada exitosamente!")
+            print("Base de datos inicializada exitosamente!")
 
 @app.route('/actualizar_estado_cuota', methods=['POST'])
 def actualizar_estado_cuota():
@@ -1204,6 +1210,20 @@ def buscar_garante(dni):
         return jsonify({
             'encontrado': False
         })
+
+@app.route('/admin')
+def admin():
+    # Obtener todos los datos de cada tabla
+    clientes = Cliente.query.all()
+    prestamos = Prestamo.query.all()
+    cuotas = Cuota.query.all()
+    garantes = Garante.query.all()
+
+    return render_template('admin.html', 
+                         clientes=clientes,
+                         prestamos=prestamos,
+                         cuotas=cuotas,
+                         garantes=garantes)
 
 if __name__ == '__main__':
     # Inicializar la base de datos

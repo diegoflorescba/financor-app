@@ -1,0 +1,206 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="admin-container p-4">
+    <h1 class="mb-4">Panel de Administración - Base de Datos</h1>
+
+    <!-- Clientes -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h2 class="h5 mb-0">Clientes</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>DNI</th>
+                            <th>Nombre</th>
+                            <th>Apellido</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Dirección</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cliente in clientes %}
+                        <tr>
+                            <td>{{ cliente.id_cliente }}</td>
+                            <td>{{ cliente.dni }}</td>
+                            <td>{{ cliente.nombre }}</td>
+                            <td>{{ cliente.apellido }}</td>
+                            <td>{{ cliente.telefono }}</td>
+                            <td>{{ cliente.correo_electronico }}</td>
+                            <td>{{ cliente.direccion }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Préstamos -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h2 class="h5 mb-0">Préstamos</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Cliente</th>
+                            <th>Garante</th>
+                            <th>Monto Prestado</th>
+                            <th>Monto Cuotas</th>
+                            <th>Monto Adeudado</th>
+                            <th>Cuotas Totales</th>
+                            <th>Cuotas Pendientes</th>
+                            <th>Tasa Interés</th>
+                            <th>Estado</th>
+                            <th>Fecha Inicio</th>
+                            <th>Fecha Fin</th>
+                            <th>Última Actualización</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for prestamo in prestamos %}
+                        <tr>
+                            <td>{{ prestamo.id_prestamo }}</td>
+                            <td>{{ prestamo.cliente.apellido }}, {{ prestamo.cliente.nombre }}</td>
+                            <td>{{ prestamo.garante.apellido + ', ' + prestamo.garante.nombre if prestamo.garante else
+                                'Sin garante' }}</td>
+                            <td>${{ "{:,.2f}".format(prestamo.monto_prestado) }}</td>
+                            <td>${{ "{:,.2f}".format(prestamo.monto_cuotas) }}</td>
+                            <td>${{ "{:,.2f}".format(prestamo.monto_adeudado) }}</td>
+                            <td>{{ prestamo.cuotas_totales }}</td>
+                            <td>{{ prestamo.cuotas_pendientes }}</td>
+                            <td>{{ prestamo.tasa_interes }}%</td>
+                            <td>{{ prestamo.estado }}</td>
+                            <td>{{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+                            <td>{{ prestamo.fecha_finalizacion.strftime('%d/%m/%Y') if prestamo.fecha_finalizacion else
+                                '-' }}</td>
+                            <td>{{ prestamo.fecha_ultima_actualizacion.strftime('%d/%m/%Y %H:%M') if
+                                prestamo.fecha_ultima_actualizacion else '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-dark">
+                        <tr>
+                            <td colspan="3"><strong>TOTALES</strong></td>
+                            <td><strong>${{ "{:,.2f}".format(prestamos|sum(attribute='monto_prestado')) }}</strong></td>
+                            <td><strong>${{ "{:,.2f}".format(prestamos|sum(attribute='monto_cuotas')) }}</strong></td>
+                            <td><strong>${{ "{:,.2f}".format(prestamos|sum(attribute='monto_adeudado')) }}</strong></td>
+                            <td><strong>{{ prestamos|sum(attribute='cuotas_totales') }}</strong></td>
+                            <td><strong>{{ prestamos|sum(attribute='cuotas_pendientes') }}</strong></td>
+                            <td colspan="5"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cuotas -->
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+            <h2 class="h5 mb-0">Cuotas</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Préstamo</th>
+                            <th>Número</th>
+                            <th>Monto</th>
+                            <th>Estado</th>
+                            <th>Fecha Vencimiento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cuota in cuotas %}
+                        <tr>
+                            <td>{{ cuota.id_cuota }}</td>
+                            <td>{{ cuota.prestamo.cliente.apellido }}, {{ cuota.prestamo.cliente.nombre }}</td>
+                            <td>{{ cuota.numero_cuota }}</td>
+                            <td>${{ "{:,.2f}".format(cuota.monto) }}</td>
+                            <td>{{ cuota.estado }}</td>
+                            <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-dark">
+                        <tr>
+                            <td colspan="3"><strong>TOTAL</strong></td>
+                            <td><strong>${{ "{:,.2f}".format(cuotas|sum(attribute='monto')) }}</strong></td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Garantes -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning">
+            <h2 class="h5 mb-0">Garantes</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>DNI</th>
+                            <th>Nombre</th>
+                            <th>Apellido</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Dirección</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for garante in garantes %}
+                        <tr>
+                            <td>{{ garante.id_garante }}</td>
+                            <td>{{ garante.dni }}</td>
+                            <td>{{ garante.nombre }}</td>
+                            <td>{{ garante.apellido }}</td>
+                            <td>{{ garante.telefono }}</td>
+                            <td>{{ garante.correo_electronico }}</td>
+                            <td>{{ garante.direccion }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+    .admin-container {
+        max-width: 95%;
+        margin: 0 auto;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .card-header {
+        font-weight: bold;
+    }
+
+    .table th {
+        white-space: nowrap;
+    }
+</style>
+{% endblock %}

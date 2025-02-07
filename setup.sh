@@ -22,11 +22,14 @@ fi
 # Clonar el repositorio público si no estamos ya en el directorio
 if [ ! -f "setup.sh" ]; then
     echo -e "${BLUE}Clonando repositorio...${NC}"
-    git clone https://github.com/diegoflorescba/financor-app.git
+    git clone https://github.com/tu_usuario/prestamos_app.git
     cd prestamos_app
+    echo -e "${BLUE}Cambiando a la rama 'andando'...${NC}"
+    git checkout andando
 else
     echo -e "${BLUE}Actualizando repositorio...${NC}"
-    git pull origin main
+    git checkout andando
+    git pull origin andando
 fi
 
 # Verificar si Homebrew está instalado

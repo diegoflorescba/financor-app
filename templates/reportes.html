@@ -82,7 +82,7 @@
                         <td class="text-right">${{ "{:,.2f}".format(prestamo.monto_cuotas).replace(',', '.') }}</td>
                         <td class="text-right">${{ "{:,.2f}".format(prestamo.monto_adeudado).replace(',', '.') }}</td>
                         <td class="text-center">
-                            <span class="status-badge {{ prestamo.estado.lower() }}">
+                            <span class="status-badge {{ prestamo.estado }}">
                                 {{ prestamo.estado }}
                             </span>
                         </td>

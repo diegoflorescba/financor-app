@@ -82,11 +82,16 @@
                         </div>
 
                         <div id="datos_garante" style="display: none;">
-                            <!-- DNI Garante -->
+                            <!-- DNI Garante con botón de búsqueda -->
                             <div class="form-group">
                                 <label for="dni_garante" class="form-label">DNI Garante *</label>
-                                <input type="text" id="dni_garante" name="dni_garante"
-                                    class="form-control form-control-lg">
+                                <div class="d-flex align-items-center">
+                                    <input type="text" id="dni_garante" name="dni_garante"
+                                        class="form-control form-control-lg">
+                                    <button type="button" class="btn btn-primary ms-2" onclick="buscarGarante()">
+                                        <i class="fas fa-search"></i> Buscar
+                                    </button>
+                                </div>
                             </div>
 
                             <!-- Nombre Garante -->
@@ -338,6 +343,10 @@
         const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
         const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
         const tbody = document.getElementById('cuotas-body');
+        const fechaHoy = new Date();
+
+        // Establecer la hora a 00:00:00 para comparar solo fechas
+        fechaHoy.setHours(0, 0, 0, 0);
 
         if (!fechaPrimeraCuota || !cuotasTotales || !montoCuota) return;
 
@@ -354,6 +363,10 @@
             const fechaCuota = new Date(fechaVencimiento);
             fechaCuota.setMonth(fechaVencimiento.getMonth() + i);
 
+            // Determinar el estado de la cuota
+            const estado = fechaCuota < fechaHoy ? 'PAGADA' : 'PENDIENTE';
+            const estadoClass = estado === 'PAGADA' ? 'text-success' : 'text-danger';
+
             const year = fechaCuota.getFullYear();
             const month = String(fechaCuota.getMonth() + 1).padStart(2, '0');
             const day = String(fechaCuota.getDate()).padStart(2, '0');
@@ -364,7 +377,7 @@
                 <td>${i + 1}</td>
                 <td>${formatearFecha(fechaISO)}</td>
                 <td>$${montoCuota.toFixed(2)}</td>
-                <td>PENDIENTE</td>
+                <td class="${estadoClass}"><strong>${estado}</strong></td>
             `;
             tbody.appendChild(row);
         }
@@ -432,5 +445,38 @@
             }
         }
     });
+
+    async function buscarGarante() {
+        const dniGarante = document.getElementById('dni_garante').value;
+        if (!dniGarante) {
+            alert('Por favor, ingrese un DNI para buscar');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/buscar_garante/${dniGarante}`);
+            const data = await response.json();
+
+            if (data.encontrado) {
+                // Autocompletar los campos con los datos del garante
+                document.getElementById('nombre_garante').value = data.garante.nombre;
+                document.getElementById('apellido_garante').value = data.garante.apellido;
+                document.getElementById('telefono_garante').value = data.garante.telefono || '';
+                document.getElementById('correo_garante').value = data.garante.correo_electronico || '';
+                document.getElementById('direccion_garante').value = data.garante.direccion || '';
+            } else {
+                alert('No se encontró un garante con ese DNI. Por favor, complete los datos manualmente.');
+                // Limpiar los campos para permitir el ingreso manual
+                document.getElementById('nombre_garante').value = '';
+                document.getElementById('apellido_garante').value = '';
+                document.getElementById('telefono_garante').value = '';
+                document.getElementById('correo_garante').value = '';
+                document.getElementById('direccion_garante').value = '';
+            }
+        } catch (error) {
+            console.error('Error al buscar garante:', error);
+            alert('Error al buscar garante. Por favor, intente nuevamente.');
+        }
+    }
 </script>
 {% endblock %}
