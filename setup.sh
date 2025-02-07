@@ -8,6 +8,27 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}Iniciando instalación de Financor...${NC}"
 
+# Verificar si git está instalado
+if ! command -v git &> /dev/null; then
+    echo -e "${BLUE}Instalando git...${NC}"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        brew install git
+    else
+        sudo apt-get update
+        sudo apt-get install -y git
+    fi
+fi
+
+# Clonar el repositorio público si no estamos ya en el directorio
+if [ ! -f "setup.sh" ]; then
+    echo -e "${BLUE}Clonando repositorio...${NC}"
+    git clone https://github.com/diegoflorescba/financor-app.git
+    cd prestamos_app
+else
+    echo -e "${BLUE}Actualizando repositorio...${NC}"
+    git pull origin main
+fi
+
 # Verificar si Homebrew está instalado
 if ! command -v brew &> /dev/null; then
     echo -e "${BLUE}Instalando Homebrew...${NC}"

@@ -8,7 +8,7 @@ import pandas as pd
 import io
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
-from sqlalchemy import or_, inspect, text
+from sqlalchemy import or_, inspect, text, func
 import locale
 
 
@@ -190,8 +190,15 @@ def reportes():
         Prestamo.monto_adeudado > 0
     ).all()
     
-    # Calcular el total adeudado general
-    total_adeudado = sum(prestamo.monto_adeudado for prestamo in prestamos)
+    # Modificar el cálculo del total adeudado para solo incluir cuotas pendientes
+    total_adeudado = db.session.query(
+        func.sum(Cuota.monto - Cuota.monto_pagado)
+    ).join(
+        Prestamo, Cuota.id_prestamo == Prestamo.id_prestamo
+    ).filter(
+        Cuota.estado == 'PENDIENTE',
+        Prestamo.estado == 'ACTIVO'
+    ).scalar() or 0
     
     # Calcular el adeudado del mes actual
     adeudado_mes_actual = db.session.query(db.func.sum(Cuota.monto))\
