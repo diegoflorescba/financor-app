@@ -8,30 +8,6 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}Iniciando instalación de Financor...${NC}"
 
-# Verificar si git está instalado
-if ! command -v git &> /dev/null; then
-    echo -e "${BLUE}Instalando git...${NC}"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install git
-    else
-        sudo apt-get update
-        sudo apt-get install -y git
-    fi
-fi
-
-# Clonar el repositorio público si no estamos ya en el directorio
-if [ ! -f "setup.sh" ]; then
-    echo -e "${BLUE}Clonando repositorio...${NC}"
-    git clone https://github.com/tu_usuario/prestamos_app.git
-    cd prestamos_app
-    echo -e "${BLUE}Cambiando a la rama 'andando'...${NC}"
-    git checkout andando
-else
-    echo -e "${BLUE}Actualizando repositorio...${NC}"
-    git checkout andando
-    git pull origin andando
-fi
-
 # Verificar si Homebrew está instalado
 if ! command -v brew &> /dev/null; then
     echo -e "${BLUE}Instalando Homebrew...${NC}"
@@ -64,13 +40,6 @@ if [ "$PYTHON_VERSION" != "$REQUIRED_VERSION" ]; then
     # Instalar Python 3.10.13
     pyenv install $REQUIRED_VERSION
     pyenv global $REQUIRED_VERSION
-    
-    # Verificar la instalación
-    PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
-    if [ "$PYTHON_VERSION" != "$REQUIRED_VERSION" ]; then
-        echo -e "${RED}Error: No se pudo instalar Python $REQUIRED_VERSION${NC}"
-        exit 1
-    fi
 fi
 
 echo -e "${GREEN}Python $REQUIRED_VERSION está instalado correctamente${NC}"
