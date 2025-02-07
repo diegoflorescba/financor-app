@@ -17,10 +17,16 @@ app = Flask(__name__)
 # Suprimir advertencias de SSL inseguro
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-# Configuración
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///prestamos.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = 'tu_clave_secreta'
+# Configuración más segura para producción
+app.config.update(
+    SECRET_KEY='tu_clave_secreta',  # Cambia esto por una clave segura
+    SQLALCHEMY_DATABASE_URI='sqlite:///instance/prestamos.db',
+    SQLALCHEMY_TRACK_MODIFICATIONS=False,
+    # Configuraciones de seguridad adicionales
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+)
 
 # Inicializar la base de datos con la app
 db.init_app(app)
@@ -1264,9 +1270,9 @@ def admin():
                          garantes=garantes)
 
 if __name__ == '__main__':
-    # Inicializar la base de datos
-    init_db()
-    
-    # Iniciar la aplicación
-    app.run(debug=True, host='0.0.0.0', port=8080)
+    # En desarrollo
+    app.run(debug=True)
+else:
+    # En producción
+    app.run()
 
