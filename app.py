@@ -19,10 +19,9 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 # Configuración más segura para producción
 app.config.update(
-    SECRET_KEY='tu_clave_secreta',  # Cambia esto por una clave segura
-    SQLALCHEMY_DATABASE_URI='sqlite:///instance/prestamos.db',
+    SECRET_KEY='tu_clave_secreta',
+    SQLALCHEMY_DATABASE_URI='sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'prestamos.db'),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
-    # Configuraciones de seguridad adicionales
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
