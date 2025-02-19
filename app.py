@@ -10,6 +10,8 @@ import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from sqlalchemy import or_, inspect, text, func
 import locale
+import json
+import traceback
 
 
 app = Flask(__name__)
@@ -37,6 +39,7 @@ with app.app_context():
 
 # Configuración de la API BCRA
 BCRA_API_URL = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{}"
+BCRA_API_URL_HISTORICA = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{}"
 
 
 @app.route('/')
@@ -763,6 +766,7 @@ def ver_cuotas(prestamo_id):
 def consultar_bcra():
     resultado = None
     resultado_cheques = None
+    resultado_historico = None
     error = None
 
     if request.method == 'POST':
@@ -777,7 +781,33 @@ def consultar_bcra():
             if response.status_code != 200:
                 raise Exception(f"Error en la consulta principal: {response.status_code}")
 
-            # Procesar datos de deudas
+            # Consulta histórica
+            response_historica = requests.get(BCRA_API_URL_HISTORICA.format(identificacion), verify=False)
+            situacion_historica = None
+            fecha_situacion = None
+            
+            if response_historica.status_code == 200:
+                data_historica = response_historica.json()
+                if 'results' in data_historica and 'periodos' in data_historica['results']:
+                    # Buscar la situación 4 o 5 más reciente
+                    for periodo in data_historica['results']['periodos']:
+                        for entidad in periodo.get('entidades', []):
+                            if entidad['situacion'] in [4, 5]:
+                                # Convertir periodo (YYYYMM) a fecha
+                                anio = int(periodo['periodo'][:4])
+                                mes = int(periodo['periodo'][4:])
+                                if not fecha_situacion or (anio, mes) > fecha_situacion:
+                                    situacion_historica = entidad['situacion']
+                                    fecha_situacion = (anio, mes)
+                                    entidad_situacion = entidad['entidad']
+                    
+                    resultado_historico = {
+                        'denominacion': data_historica['results'].get('denominacion', ''),
+                        'identificacion': data_historica['results'].get('identificacion', ''),
+                        'periodos': data_historica['results']['periodos']
+                    }
+
+            # Procesar datos de deudas actuales
             data = response.json()
             if 'results' in data and 'periodos' in data['results'] and data['results']['periodos']:
                 todas_situacion_1 = True
@@ -803,10 +833,14 @@ def consultar_bcra():
 
                 if todas_situacion_1:
                     estado = 'Preaprobado: Situación 1'
-                    clase = 'success'
+                    if situacion_historica:
+                        estado += f' (Atención: Situación {situacion_historica} en {entidad_situacion} - {fecha_situacion[1]}/{fecha_situacion[0]})'
+                    clase = 'warning' if situacion_historica else 'success'
                 else:
                     situaciones = ', '.join(map(str, situaciones_encontradas))
                     estado = f'Revisar: Situación {situaciones}'
+                    if situacion_historica:
+                        estado += f' (Histórico: Situación {situacion_historica} en {entidad_situacion} - {fecha_situacion[1]}/{fecha_situacion[0]})'
                     clase = 'warning'
 
                 resultado = {
@@ -901,7 +935,8 @@ def consultar_bcra():
 
     return render_template('consulta_bcra.html', 
                          resultado=resultado, 
-                         resultado_cheques=resultado_cheques, 
+                         resultado_cheques=resultado_cheques,
+                         resultado_historico=resultado_historico,
                          error=error,
                          active_page='bcra')
 
@@ -1267,6 +1302,31 @@ def admin():
                          prestamos=prestamos,
                          cuotas=cuotas,
                          garantes=garantes)
+
+@app.route('/test_bcra/<cuit>')
+def test_bcra(cuit):
+    try:
+        # Construir la URL con el CUIT
+        url = BCRA_API_URL.format(cuit)
+        
+        # Realizar la consulta
+        response = requests.get(url, verify=False)
+        
+        # Obtener el JSON completo
+        data = response.json()
+        
+        # Formatear la respuesta para mejor legibilidad
+        formatted_response = {
+            'status_code': response.status_code,
+            'headers': dict(response.headers),
+            'raw_data': data
+        }
+        
+        # Retornar como HTML preformateado para mejor visualización
+        return f'<pre>{json.dumps(formatted_response, indent=2, ensure_ascii=False)}</pre>'
+        
+    except Exception as e:
+        return f'Error: {str(e)}\n\nStack trace:\n{traceback.format_exc()}'
 
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")

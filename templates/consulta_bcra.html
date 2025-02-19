@@ -129,6 +129,53 @@
         </div>
     </div>
 
+    {% if resultado_historico and resultado_historico.periodos %}
+    <div class="card mt-4">
+        <div class="card-header bg-primary text-white py-3">
+            <h5 class="mb-0">
+                <i class="fas fa-history me-2"></i>
+                Historial de Deudas
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Período</th>
+                            <th>Entidad</th>
+                            <th>Situación</th>
+                            <th>Monto</th>
+                            <th>Proceso Judicial</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for periodo in resultado_historico.periodos %}
+                        {% for entidad in periodo.entidades %}
+                        <tr>
+                            <td>
+                                {% set anio = periodo.periodo[:4] %}
+                                {% set mes = periodo.periodo[4:] %}
+                                {{ mes }}/{{ anio }}
+                            </td>
+                            <td>{{ entidad.entidad }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if entidad.situacion == 1 else 'warning' }}">
+                                    {{ entidad.situacion }}
+                                </span>
+                            </td>
+                            <td>${{ entidad.monto|round(2) }}</td>
+                            <td>{{ 'Sí' if entidad.procesoJud else 'No' }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% if resultado_cheques and resultado_cheques.detalles %}
     <div class="card mt-4">
         <div class="card-header bg-info text-white py-3">
@@ -215,6 +262,15 @@
 
     .text-danger {
         color: #dc3545 !important;
+    }
+
+    .table td {
+        vertical-align: middle;
+    }
+
+    .badge {
+        font-size: 0.9em;
+        padding: 0.4em 0.6em;
     }
 </style>
 {% endblock %}
