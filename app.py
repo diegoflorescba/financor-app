@@ -1328,11 +1328,18 @@ def test_bcra(cuit):
     except Exception as e:
         return f'Error: {str(e)}\n\nStack trace:\n{traceback.format_exc()}'
 
-@app.route('/actualizar_fechas_prestamo/<int:id_prestamo>', methods=['POST'])
+@app.route('/actualizar_fechas_prestamo/<int:id_prestamo>', methods=['GET', 'POST'])
 def actualizar_fechas_prestamo(id_prestamo):
+    prestamo = Prestamo.query.get_or_404(id_prestamo)
+    
+    if request.method == 'GET':
+        # Mostrar página de confirmación
+        return render_template('confirmar_actualizacion.html', 
+                            prestamo=prestamo,
+                            nueva_fecha_primera_cuota="10/04/2024",
+                            nueva_fecha_final="10/03/2025")
+    
     try:
-        prestamo = Prestamo.query.get_or_404(id_prestamo)
-        
         # Obtener la nueva fecha de primera cuota
         nueva_fecha_primera_cuota = datetime(2024, 4, 10)  # 10/04/2024
         

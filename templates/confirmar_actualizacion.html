@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow">
+        <div class="card-header bg-warning">
+            <h3 class="mb-0">Confirmar Actualización de Fechas</h3>
+        </div>
+        <div class="card-body">
+            <h4>Préstamo de: {{ prestamo.cliente.apellido }}, {{ prestamo.cliente.nombre }}</h4>
+            <p>Se realizarán los siguientes cambios:</p>
+            <ul>
+                <li>Nueva fecha primera cuota: {{ nueva_fecha_primera_cuota }}</li>
+                <li>Nueva fecha finalización: {{ nueva_fecha_final }}</li>
+            </ul>
+
+            <div class="mt-4">
+                <form action="{{ url_for('actualizar_fechas_prestamo', id_prestamo=prestamo.id_prestamo) }}"
+                    method="POST">
+                    <button type="submit" class="btn btn-warning">
+                        Confirmar Actualización
+                    </button>
+                    <a href="{{ url_for('prestamos') }}" class="btn btn-secondary ms-2">
+                        Cancelar
+                    </a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
