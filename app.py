@@ -1351,25 +1351,18 @@ def actualizar_fechas_prestamo(id_prestamo):
             nueva_fecha = nueva_fecha_primera_cuota + relativedelta(months=i)
             cuota.fecha_vencimiento = nueva_fecha
             
-            # Actualizar el estado si es necesario
-            if nueva_fecha.date() < datetime.now().date():
-                cuota.estado = 'PAGADA'
-                cuota.pagada = True
-                cuota.monto_pagado = cuota.monto
-                cuota.fecha_pago = datetime.now()
-            else:
-                cuota.estado = 'PENDIENTE'
-                cuota.pagada = False
-                cuota.monto_pagado = 0
-                cuota.fecha_pago = None
+            # Establecer todas las cuotas como PENDIENTES
+            cuota.estado = 'PENDIENTE'
+            cuota.pagada = False
+            cuota.monto_pagado = 0
+            cuota.fecha_pago = None
         
         # Actualizar la fecha de finalización del préstamo
         prestamo.fecha_finalizacion = nueva_fecha_primera_cuota + relativedelta(months=len(cuotas)-1)
         
-        # Recalcular cuotas pendientes y monto adeudado
-        cuotas_pagadas = sum(1 for cuota in cuotas if cuota.pagada)
-        prestamo.cuotas_pendientes = len(cuotas) - cuotas_pagadas
-        prestamo.monto_adeudado = sum(cuota.monto for cuota in cuotas if not cuota.pagada)
+        # Actualizar el préstamo
+        prestamo.cuotas_pendientes = len(cuotas)  # Todas las cuotas pendientes
+        prestamo.monto_adeudado = sum(cuota.monto for cuota in cuotas)  # Todo el monto pendiente
         
         db.session.commit()
         flash('Fechas del préstamo actualizadas correctamente', 'success')
