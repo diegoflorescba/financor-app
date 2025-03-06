@@ -1328,6 +1328,51 @@ def test_bcra(cuit):
     except Exception as e:
         return f'Error: {str(e)}\n\nStack trace:\n{traceback.format_exc()}'
 
+@app.route('/actualizar_fechas_prestamo/<int:id_prestamo>', methods=['POST'])
+def actualizar_fechas_prestamo(id_prestamo):
+    try:
+        prestamo = Prestamo.query.get_or_404(id_prestamo)
+        
+        # Obtener la nueva fecha de primera cuota
+        nueva_fecha_primera_cuota = datetime(2024, 4, 10)  # 10/04/2024
+        
+        # Actualizar todas las cuotas
+        cuotas = Cuota.query.filter_by(id_prestamo=id_prestamo).order_by(Cuota.numero_cuota).all()
+        
+        for i, cuota in enumerate(cuotas):
+            # Calcular la nueva fecha de vencimiento para cada cuota
+            nueva_fecha = nueva_fecha_primera_cuota + relativedelta(months=i)
+            cuota.fecha_vencimiento = nueva_fecha
+            
+            # Actualizar el estado si es necesario
+            if nueva_fecha.date() < datetime.now().date():
+                cuota.estado = 'PAGADA'
+                cuota.pagada = True
+                cuota.monto_pagado = cuota.monto
+                cuota.fecha_pago = datetime.now()
+            else:
+                cuota.estado = 'PENDIENTE'
+                cuota.pagada = False
+                cuota.monto_pagado = 0
+                cuota.fecha_pago = None
+        
+        # Actualizar la fecha de finalización del préstamo
+        prestamo.fecha_finalizacion = nueva_fecha_primera_cuota + relativedelta(months=len(cuotas)-1)
+        
+        # Recalcular cuotas pendientes y monto adeudado
+        cuotas_pagadas = sum(1 for cuota in cuotas if cuota.pagada)
+        prestamo.cuotas_pendientes = len(cuotas) - cuotas_pagadas
+        prestamo.monto_adeudado = sum(cuota.monto for cuota in cuotas if not cuota.pagada)
+        
+        db.session.commit()
+        flash('Fechas del préstamo actualizadas correctamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar las fechas: {str(e)}', 'error')
+    
+    return redirect(url_for('prestamos'))
+
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")
     app.run(debug=True)
