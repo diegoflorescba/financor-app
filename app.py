@@ -506,10 +506,10 @@ def crear_cliente():
 
 @app.route('/prestamos')
 def prestamos():
-    # Obtener todos los clientes con sus préstamos y cuotas precargados
+    # Modificar la consulta para ordenar por id_prestamo
     clientes = Cliente.query.options(
         db.joinedload(Cliente.prestamos).joinedload(Prestamo.cuotas)
-    ).order_by(Cliente.apellido).all()
+    ).join(Cliente.prestamos).order_by(Prestamo.id_prestamo).all()
     
     return render_template('prestamos.html', clientes=clientes, active_page='prestamos')
 
