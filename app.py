@@ -43,6 +43,9 @@ with app.app_context():
 BCRA_API_URL = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{}"
 BCRA_API_URL_HISTORICA = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{}"
 
+def format_money(amount):
+    """Formatea números en formato español manualmente"""
+    return "{:,.2f}".format(amount).replace(",", "X").replace(".", ",").replace("X", ".")
 
 @app.route('/')
 @app.route('/index')
@@ -429,8 +432,7 @@ def exportar_excel():
 @app.template_filter('money')
 def money_format(value):
     try:
-        formatted = format_decimal(value, format='#,##0.00', locale='es_AR')
-        return f"${formatted}"
+        return f"${format_money(value)}"
     except:
         return f"${value:.2f}"
 
@@ -1395,11 +1397,6 @@ def generar_contrato(prestamo_id):
         prestamo = Prestamo.query.get_or_404(prestamo_id)
         cliente = prestamo.cliente
         garante = Garante.query.get(prestamo.id_garante) if prestamo.id_garante else None
-        
-        # Formatear números manualmente si el locale falla
-        def format_money(amount):
-            """Formatea números en formato español manualmente"""
-            return "{:,.2f}".format(amount).replace(",", "X").replace(".", ",").replace("X", ".")
         
         # Cargar el template
         doc = Document('templates/template_mutuo.docx')
