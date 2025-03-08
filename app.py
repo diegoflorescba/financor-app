@@ -12,6 +12,8 @@ from sqlalchemy import or_, inspect, text, func
 import locale
 import json
 import traceback
+from docx import Document
+from docx.shared import Pt
 
 
 app = Flask(__name__)
@@ -1372,6 +1374,85 @@ def actualizar_fechas_prestamo(id_prestamo):
         flash(f'Error al actualizar las fechas: {str(e)}', 'error')
     
     return redirect(url_for('prestamos'))
+
+@app.route('/generar_contrato/<int:prestamo_id>')
+def generar_contrato(prestamo_id):
+    try:
+        # Intentar configurar el locale para español
+        try:
+            locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
+        except locale.Error:
+            try:
+                locale.setlocale(locale.LC_ALL, 'es_ES')
+            except locale.Error:
+                try:
+                    locale.setlocale(locale.LC_ALL, 'Spanish_Spain.1252')
+                except locale.Error:
+                    # Si ningún locale español está disponible, usar el locale por defecto
+                    locale.setlocale(locale.LC_ALL, '')
+        
+        # Obtener datos
+        prestamo = Prestamo.query.get_or_404(prestamo_id)
+        cliente = prestamo.cliente
+        garante = Garante.query.get(prestamo.id_garante) if prestamo.id_garante else None
+        
+        # Formatear números manualmente si el locale falla
+        def format_money(amount):
+            """Formatea números en formato español manualmente"""
+            return "{:,.2f}".format(amount).replace(",", "X").replace(".", ",").replace("X", ".")
+        
+        # Cargar el template
+        doc = Document('templates/template_mutuo.docx')
+        
+        # Crear diccionario con todos los reemplazos
+        replacements = {
+            '{fecha_actual}': datetime.now().strftime('%d/%m/%Y'),
+            '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
+            '{dni}': cliente.dni,
+            '{domicilio}': cliente.direccion or '',
+            '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
+            '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado),
+            '{cantidad_cuotas}': str(prestamo.cuotas_totales),
+            '{monto_cuota}': f"${format_money(prestamo.monto_cuotas)}",
+            '{monto_cuota_letras}': numero_a_letras(prestamo.monto_cuotas),
+            '{fecha_primera_cuota}': prestamo.cuotas[0].fecha_vencimiento.strftime('%d/%m/%Y'),
+        }
+        
+        if garante:
+            replacements.update({
+                '{nombre_apellido_garante}': f"{garante.nombre} {garante.apellido}",
+                '{dni_garante}': garante.dni,
+                '{domicilio_garante}': garante.direccion or '',
+            })
+        
+        # Reemplazar en el documento
+        for paragraph in doc.paragraphs:
+            for key, value in replacements.items():
+                if key in paragraph.text:
+                    paragraph.text = paragraph.text.replace(key, value)
+        
+        # Guardar temporalmente
+        temp_path = f'prestamos_app/temp/contrato_prestamo_{prestamo_id}.docx'
+        os.makedirs('prestamos_app/temp', exist_ok=True)
+        doc.save(temp_path)
+        
+        # Enviar archivo
+        return send_file(
+            temp_path,
+            as_attachment=True,
+            download_name=f'Contrato_Prestamo_{cliente.apellido}_{prestamo_id}.docx'
+        )
+        
+    except Exception as e:
+        print(f"Error detallado: {str(e)}")  # Para debugging
+        flash(f'Error al generar el contrato: {str(e)}', 'error')
+        return redirect(url_for('prestamos'))
+
+def numero_a_letras(numero):
+    # Implementar función para convertir números a letras
+    # Puedes usar la biblioteca num2words
+    from num2words import num2words
+    return num2words(numero, lang='es').upper()
 
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")

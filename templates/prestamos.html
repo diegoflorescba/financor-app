@@ -28,10 +28,18 @@
                     {% if cliente.prestamos %}
                     {% for prestamo in cliente.prestamos %}
                     <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <strong>Préstamo #{{ prestamo.id_prestamo }}</strong> -
-                            Monto: ${{ "%.2f"|format(prestamo.monto_prestado) }} -
-                            Fecha: {{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Préstamo #{{ prestamo.id_prestamo }}</strong> -
+                                Monto: ${{ "%.2f"|format(prestamo.monto_prestado) }} -
+                                Fecha: {{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}
+                            </div>
+                            <div>
+                                <a href="{{ url_for('generar_contrato', prestamo_id=prestamo.id_prestamo) }}"
+                                    class="btn btn-primary btn-sm">
+                                    <i class="fas fa-file-contract"></i> Generar Contrato
+                                </a>
+                            </div>
                         </div>
                         <div class="card-body">
                             {% if prestamo.cuotas %}
