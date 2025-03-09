@@ -1445,6 +1445,60 @@ def generar_contrato(prestamo_id):
         flash(f'Error al generar el contrato: {str(e)}', 'error')
         return redirect(url_for('prestamos'))
 
+@app.route('/generar_pagare/<int:prestamo_id>')
+def generar_pagare(prestamo_id):
+    try:
+        # Intentar configurar el locale para español
+        try:
+            locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
+        except locale.Error:
+            try:
+                locale.setlocale(locale.LC_ALL, 'es_ES')
+            except locale.Error:
+                try:
+                    locale.setlocale(locale.LC_ALL, 'Spanish_Spain.1252')
+                except locale.Error:
+                    # Si ningún locale español está disponible, usar el locale por defecto
+                    locale.setlocale(locale.LC_ALL, '')
+        
+        # Obtener datos
+        prestamo = Prestamo.query.get_or_404(prestamo_id)
+        cliente = prestamo.cliente
+        
+        # Cargar el template
+        doc = Document('templates/template_pagare.docx')
+        
+        # Crear diccionario con los reemplazos necesarios
+        replacements = {
+            '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
+            '{domicilio}': cliente.direccion or '',
+            '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
+            '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado)
+        }
+        
+        # Reemplazar en el documento
+        for paragraph in doc.paragraphs:
+            for key, value in replacements.items():
+                if key in paragraph.text:
+                    paragraph.text = paragraph.text.replace(key, value)
+        
+        # Guardar temporalmente
+        temp_path = f'prestamos_app/temp/pagare_prestamo_{prestamo_id}.docx'
+        os.makedirs('prestamos_app/temp', exist_ok=True)
+        doc.save(temp_path)
+        
+        # Enviar archivo
+        return send_file(
+            temp_path,
+            as_attachment=True,
+            download_name=f'Pagare_Prestamo_{cliente.apellido}_{prestamo_id}.docx'
+        )
+        
+    except Exception as e:
+        print(f"Error detallado: {str(e)}")  # Para debugging
+        flash(f'Error al generar el pagaré: {str(e)}', 'error')
+        return redirect(url_for('prestamos'))
+
 def numero_a_letras(numero):
     # Implementar función para convertir números a letras
     # Puedes usar la biblioteca num2words
