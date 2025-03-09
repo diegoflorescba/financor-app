@@ -3,11 +3,13 @@ services:
     name: financor
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: cd prestamos_app && gunicorn wsgi:app
+    startCommand: cd prestamos_app && gunicorn --bind=0.0.0.0:$PORT wsgi:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
       - key: FLASK_APP
         value: app
       - key: FLASK_ENV
-        value: production 
+        value: production
+      - key: PORT
+        value: 10000 

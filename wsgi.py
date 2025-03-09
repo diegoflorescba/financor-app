@@ -1,10 +1,8 @@
-import sys
 import os
-
-# Agregar el directorio del proyecto al path de Python
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 from app import app
 
+# Configurar el puerto para Render
+port = int(os.environ.get('PORT', 10000))
+
 if __name__ == "__main__":
-    app.run() 
+    app.run(host='0.0.0.0', port=port) 
