@@ -1541,7 +1541,7 @@ def ver_dni(dni):
             
             info.append("=" * 80)
         
-        return f"<pre>{''.join(f'{line}\n' for line in info)}</pre>"
+        return "<pre>" + "\n".join(info) + "</pre>"
         
     except Exception as e:
         return f"<pre>Error al procesar la consulta: {str(e)}</pre>"
