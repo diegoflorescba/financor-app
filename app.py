@@ -1340,12 +1340,12 @@ def actualizar_fechas_prestamo(id_prestamo):
         # Mostrar página de confirmación
         return render_template('confirmar_actualizacion.html', 
                             prestamo=prestamo,
-                            nueva_fecha_primera_cuota="10/04/2024",
-                            nueva_fecha_final="10/03/2025")
+                            nueva_fecha_primera_cuota="10/04/2025",
+                            nueva_fecha_final="10/03/2026")
     
     try:
         # Obtener la nueva fecha de primera cuota
-        nueva_fecha_primera_cuota = datetime(2024, 4, 10)  # 10/04/2024
+        nueva_fecha_primera_cuota = datetime(2025, 4, 10)  # 10/04/2025
         
         # Actualizar todas las cuotas
         cuotas = Cuota.query.filter_by(id_prestamo=id_prestamo).order_by(Cuota.numero_cuota).all()
