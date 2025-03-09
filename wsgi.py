@@ -1,4 +1,9 @@
 import os
+import sys
+
+# Agregar el directorio actual al path de Python
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from app import app
 
 # Configurar el puerto para Render
