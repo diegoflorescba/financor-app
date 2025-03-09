@@ -1451,6 +1451,101 @@ def numero_a_letras(numero):
     from num2words import num2words
     return num2words(numero, lang='es').upper()
 
+@app.route('/dni/<string:dni>')
+def ver_dni(dni):
+    try:
+        # Buscar como cliente
+        cliente = Cliente.query.filter_by(dni=dni).first()
+        # Buscar como garante
+        garante = Garante.query.filter_by(dni=dni).first()
+        
+        if not cliente and not garante:
+            return f"<pre>No se encontró información para el DNI: {dni}</pre>"
+        
+        info = []
+        info.append("=" * 80)
+        
+        # Información como cliente
+        if cliente:
+            info.append(f"INFORMACIÓN COMO CLIENTE:")
+            info.append("-" * 40)
+            info.append(f"ID: {cliente.id_cliente}")
+            info.append(f"Nombre: {cliente.apellido}, {cliente.nombre}")
+            info.append(f"DNI: {cliente.dni}")
+            info.append(f"Teléfono: {cliente.telefono}")
+            info.append(f"Dirección: {cliente.direccion}")
+            info.append(f"Email: {cliente.correo_electronico}")
+            info.append("")
+            
+            # Préstamos del cliente
+            prestamos = Prestamo.query.filter_by(id_cliente=cliente.id_cliente).all()
+            if prestamos:
+                info.append("PRÉSTAMOS:")
+                info.append("-" * 40)
+                for prestamo in prestamos:
+                    info.append(f"\nPréstamo #{prestamo.id_prestamo}")
+                    info.append(f"Monto prestado: ${format_money(prestamo.monto_prestado)}")
+                    info.append(f"Monto adeudado: ${format_money(prestamo.monto_adeudado)}")
+                    info.append(f"Estado: {prestamo.estado}")
+                    info.append(f"Cuotas: {prestamo.cuotas_pendientes}/{prestamo.cuotas_totales}")
+                    info.append(f"Fecha inicio: {prestamo.fecha_inicio.strftime('%d/%m/%Y')}")
+                    
+                    # Información del garante si existe
+                    if prestamo.id_garante:
+                        garante_prestamo = Garante.query.get(prestamo.id_garante)
+                        info.append(f"Garante: {garante_prestamo.apellido}, {garante_prestamo.nombre} (DNI: {garante_prestamo.dni})")
+                    
+                    # Cuotas del préstamo
+                    cuotas = Cuota.query.filter_by(id_prestamo=prestamo.id_prestamo).order_by(Cuota.numero_cuota).all()
+                    info.append("\nDetalle de cuotas:")
+                    info.append("N°  | Vencimiento | Monto    | Estado   | Fecha Pago")
+                    info.append("-" * 60)
+                    for cuota in cuotas:
+                        fecha_pago = cuota.fecha_pago.strftime('%d/%m/%Y') if cuota.fecha_pago else '-'
+                        info.append(f"{cuota.numero_cuota:2d}  | {cuota.fecha_vencimiento.strftime('%d/%m/%Y')} | ${format_money(cuota.monto):8} | {cuota.estado:8} | {fecha_pago}")
+                    info.append("")
+            else:
+                info.append("No tiene préstamos registrados como cliente")
+            
+            info.append("=" * 80)
+        
+        # Información como garante
+        if garante:
+            info.append("\nINFORMACIÓN COMO GARANTE:")
+            info.append("-" * 40)
+            info.append(f"ID: {garante.id_garante}")
+            info.append(f"Nombre: {garante.apellido}, {garante.nombre}")
+            info.append(f"DNI: {garante.dni}")
+            info.append(f"Teléfono: {garante.telefono}")
+            info.append(f"Dirección: {garante.direccion}")
+            info.append(f"Email: {garante.correo_electronico}")
+            info.append("")
+            
+            # Préstamos donde es garante
+            prestamos_garantizados = Prestamo.query.filter_by(id_garante=garante.id_garante).all()
+            if prestamos_garantizados:
+                info.append("PRÉSTAMOS DONDE ES GARANTE:")
+                info.append("-" * 40)
+                for prestamo in prestamos_garantizados:
+                    cliente_prestamo = Cliente.query.get(prestamo.id_cliente)
+                    info.append(f"\nPréstamo #{prestamo.id_prestamo}")
+                    info.append(f"Cliente: {cliente_prestamo.apellido}, {cliente_prestamo.nombre}")
+                    info.append(f"DNI Cliente: {cliente_prestamo.dni}")
+                    info.append(f"Monto prestado: ${format_money(prestamo.monto_prestado)}")
+                    info.append(f"Monto adeudado: ${format_money(prestamo.monto_adeudado)}")
+                    info.append(f"Estado: {prestamo.estado}")
+                    info.append(f"Fecha inicio: {prestamo.fecha_inicio.strftime('%d/%m/%Y')}")
+                    info.append("")
+            else:
+                info.append("No es garante de ningún préstamo actualmente")
+            
+            info.append("=" * 80)
+        
+        return f"<pre>{''.join(f'{line}\n' for line in info)}</pre>"
+        
+    except Exception as e:
+        return f"<pre>Error al procesar la consulta: {str(e)}</pre>"
+
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")
     app.run(debug=True)
