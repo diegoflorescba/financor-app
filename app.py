@@ -24,12 +24,15 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 # Configuración más segura para producción
 app.config.update(
     SECRET_KEY='tu_clave_secreta_aqui',
-    SQLALCHEMY_DATABASE_URI='sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'prestamos.db'),
+    SQLALCHEMY_DATABASE_URI='sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'data', 'prestamos.db'),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
 )
+
+# Asegurarse de que el directorio data existe
+os.makedirs(os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'data'), exist_ok=True)
 
 # Inicializar la base de datos
 db.init_app(app)
