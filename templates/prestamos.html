@@ -1,8 +1,15 @@
 {% extends 'layout.html' %}
 
-{% block content %}
+{% block main_content %}
 <div class="container mt-4">
-    <h2 class="mb-4">Listado de Préstamos por Cliente</h2>
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold">
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Listado de Préstamos por Cliente
+            </h2>
+        </div>
+    </div>
 
     <div class="accordion" id="accordionPrestamos">
         {% for cliente in clientes %}

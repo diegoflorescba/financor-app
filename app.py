@@ -1,8 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, session
 from datetime import datetime, date, timedelta
 from calendar import monthrange
 from dateutil.relativedelta import relativedelta
-from models import db, Cliente, Prestamo, Cuota, Garante
+from models import db, Cliente, Prestamo, Cuota, Garante, User, AuditLog
 import os
 import pandas as pd
 import io
@@ -14,30 +14,66 @@ import json
 import traceback
 from docx import Document
 from docx.shared import Pt
+from flask_login import LoginManager, login_required, current_user, login_user, logout_user
+from auth import admin_required, user_required, audit_change, get_changes
+from flask_wtf.csrf import CSRFProtect
+from auth_routes import auth
 
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+
+# Configuración de la base de datos
+db_path = os.path.join(os.path.dirname(__file__), 'prestamos.db')
+db_dir = os.path.dirname(db_path)
+os.makedirs(db_dir, exist_ok=True)
+os.chmod(db_dir, 0o777)  # Dar permisos de lectura/escritura al directorio
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Configuración de sesión
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # Reducido a 30 minutos
+app.config['SESSION_COOKIE_SECURE'] = True  # Solo HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(minutes=30)  # Duración del "recordarme"
+app.config['REMEMBER_COOKIE_REFRESH_EACH_REQUEST'] = True  # Refrescar la cookie en cada request
+
+# Initialize SQLAlchemy
+db.init_app(app)
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
+# Register auth blueprint with url_prefix
+app.register_blueprint(auth, url_prefix='/auth')
+
+# Configuración de Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'  # Ruta para el login
+login_manager.login_message = 'Por favor inicie sesión para acceder a esta página.'
+login_manager.login_message_category = 'warning'
+login_manager.session_protection = 'strong'  # Añadir protección de sesión fuerte
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+@app.context_processor
+def utility_processor():
+    def is_admin():
+        return current_user.is_authenticated and current_user.is_admin
+    return dict(is_admin=is_admin)
 
 # Suprimir advertencias de SSL inseguro
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-# Configuración más segura para producción
-app.config.update(
-    SECRET_KEY='tu_clave_secreta_aqui',
-    SQLALCHEMY_DATABASE_URI='sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance', 'prestamos.db'),
-    SQLALCHEMY_TRACK_MODIFICATIONS=False,
-    SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-)
-
-# Inicializar la base de datos
-db.init_app(app)
-
 # Crear las tablas si no existen
 with app.app_context():
     db.create_all()
-    print("Base de datos inicializada correctamente")
 
 # Configuración de la API BCRA
 BCRA_API_URL = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{}"
@@ -48,18 +84,29 @@ def format_money(amount):
     return "{:,.2f}".format(amount).replace(",", "X").replace(".", ",").replace("X", ".")
 
 @app.route('/')
+def root():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    return redirect(url_for('auth.login'))
+
 @app.route('/index')
+@login_required
 def index():
+    if not current_user.is_authenticated:
+        return redirect(url_for('auth.login'))
     return render_template('index.html', active_page='inicio')
 
 
 @app.route('/clientes')
+@user_required
 def clientes():
     clientes_list = Cliente.query.order_by(Cliente.apellido).all()
     return render_template('clientes.html', clientes=clientes_list, active_page='clientes')
 
 
 @app.route('/cliente/nuevo', methods=['GET', 'POST'])
+@login_required
+@admin_required
 def nuevo_cliente():
     if request.method == 'POST':
         try:
@@ -72,9 +119,13 @@ def nuevo_cliente():
                 direccion=request.form.get('direccion', ''),
                 documentacion_verificada=bool(request.form.get('documentacion_verificada')),
                 fecha_registro=datetime.now(),
-                activo=bool(request.form.get('activo', True))
+                activo=bool(request.form.get('activo', True)),
+                created_by=current_user.id
             )
             db.session.add(nuevo_cliente)
+            db.session.flush()
+            
+            audit_change('create', 'cliente', nuevo_cliente.id_cliente)
             db.session.commit()
             flash('Cliente registrado exitosamente', 'success')
             return redirect(url_for('clientes'))
@@ -220,6 +271,7 @@ def registro():
 
 
 @app.route('/reportes')
+@user_required
 def reportes():
     # Configurar el locale en español
     locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
@@ -308,6 +360,7 @@ def reportes():
 
 
 @app.route('/cuotas_a_vencer')
+@user_required
 def cuotas_a_vencer():
     # Configurar el locale en español
     locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
@@ -335,16 +388,20 @@ def cuotas_a_vencer():
                          cuotas=cuotas,
                          total_a_cobrar=total_a_cobrar,
                          today=today,
-                         mes_actual=mes_actual)
+                         mes_actual=mes_actual,
+                         active_page='cuotas_a_vencer')
 
 
 @app.route('/cliente/<int:id>')
+@user_required
 def ver_cliente(id):
     cliente = Cliente.query.get_or_404(id)
-    return render_template('cliente_detalle.html', cliente=cliente)
+    return render_template('cliente_detalle.html', cliente=cliente, active_page='clientes')
 
 
 @app.route('/cliente/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
 def editar_cliente(id):
     cliente = Cliente.query.get_or_404(id)
     
@@ -356,6 +413,7 @@ def editar_cliente(id):
             cliente.telefono = request.form['telefono']
             cliente.correo_electronico = request.form['correo_electronico']
             cliente.direccion = request.form['direccion']
+            cliente.updated_by = current_user.id
             
             db.session.commit()
             flash('Cliente actualizado exitosamente', 'success')
@@ -438,29 +496,27 @@ def money_format(value):
 
 
 @app.route('/pagar_cuota/<int:cuota_id>', methods=['POST'])
+@login_required
+@admin_required
 def pagar_cuota(cuota_id):
     try:
-        with db.session.begin_nested():  # Crear un savepoint
-            # Obtener la cuota
+        with db.session.begin_nested():
             cuota = Cuota.query.get_or_404(cuota_id)
-
-            # Verificar que la cuota no esté pagada
             if cuota.pagada:
                 flash('Esta cuota ya está pagada', 'warning')
                 return redirect(url_for('cuotas_a_vencer'))
 
-            # Marcar la cuota como pagada
             cuota.pagada = True
             cuota.fecha_pago = datetime.now()
             cuota.monto_pagado = cuota.monto
             cuota.estado = 'PAGADA'
+            cuota.updated_by = current_user.id
 
-            # Actualizar el préstamo
             prestamo = cuota.prestamo
             prestamo.cuotas_pendientes -= 1
             prestamo.monto_adeudado -= cuota.monto
+            prestamo.updated_by = current_user.id
 
-            # Si es la última cuota, actualizar estado del préstamo
             if prestamo.cuotas_pendientes == 0:
                 prestamo.estado = 'FINALIZADO'
                 prestamo.fecha_finalizacion = datetime.now()
@@ -476,6 +532,8 @@ def pagar_cuota(cuota_id):
 
 
 @app.route('/crear_cliente', methods=['POST'])
+@login_required
+@admin_required
 def crear_cliente():
     try:
         nuevo_cliente = Cliente(
@@ -509,16 +567,17 @@ def crear_cliente():
 
 
 @app.route('/prestamos')
+@user_required
 def prestamos():
-    # Modificar la consulta para ordenar por id_prestamo
     clientes = Cliente.query.options(
         db.joinedload(Cliente.prestamos).joinedload(Prestamo.cuotas)
-    ).join(Cliente.prestamos).order_by(Prestamo.id_prestamo).all()
-    
+    ).all()
     return render_template('prestamos.html', clientes=clientes, active_page='prestamos')
 
 
 @app.route('/crear_prestamo', methods=['POST'])
+@login_required
+@admin_required
 def crear_prestamo():
     try:
         # Obtener datos del formulario
@@ -670,39 +729,6 @@ def debug_db():
         return f"<pre>{debug_info}</pre>"
 
 
-@app.route('/reset_prestamos')
-def reset_prestamos():
-    with app.app_context():
-        try:
-            # Eliminar todas las cuotas
-            Cuota.query.delete()
-            # Eliminar todos los préstamos
-            Prestamo.query.delete()
-            db.session.commit()
-            return "Préstamos y cuotas eliminados correctamente"
-        except Exception as e:
-            db.session.rollback()
-            return f"Error: {str(e)}"
-
-
-@app.route('/debug_prestamo/<int:prestamo_id>')
-def debug_prestamo(prestamo_id):
-    prestamo = Prestamo.query.get_or_404(prestamo_id)
-    cuotas = Cuota.query.filter_by(id_prestamo=prestamo_id).all()
-
-    debug_info = f"""
-    Préstamo ID: {prestamo.id_prestamo}
-    Monto: ${prestamo.monto_prestado}
-    Cuotas totales: {prestamo.cuotas_totales}
-    Estado: {prestamo.estado}
-    
-    Cuotas:
-    {[f'ID: {c.id_cuota}, Número: {c.numero_cuota}, Vence: {c.fecha_vencimiento}, Pagada: {c.pagada}' for c in cuotas]}
-    """
-
-    return f"<pre>{debug_info}</pre>"
-
-
 @app.route('/recrear_cuotas/<int:prestamo_id>')
 def recrear_cuotas(prestamo_id):
     try:
@@ -715,11 +741,11 @@ def recrear_cuotas(prestamo_id):
         fecha_base = prestamo.fecha_inicio or datetime.now()
         for i in range(prestamo.cuotas_totales):
             mes_actual = fecha_base.month + i
-            año_actual = fecha_base.year + ((mes_actual - 1) // 12)
+            ano_actual = fecha_base.year + ((mes_actual - 1) // 12)
             mes_actual = ((mes_actual - 1) % 12) + 1
 
             fecha_vencimiento = fecha_base.replace(
-                year=año_actual, month=mes_actual)
+                year=ano_actual, month=mes_actual)
 
             nueva_cuota = Cuota(
                 numero_cuota=i + 1,
@@ -767,6 +793,7 @@ def ver_cuotas(prestamo_id):
 
 
 @app.route('/consultar_bcra', methods=['GET', 'POST'])
+@user_required
 def consultar_bcra():
     resultado = None
     resultado_cheques = None
@@ -951,10 +978,12 @@ def prestamos_otorgados():
 
 
 @app.route('/buscar_clientes')
+@user_required
 def buscar_clientes():
-    return render_template('buscar_clientes.html', active_page='cargar_prestamos')
+    return render_template('buscar_clientes.html', active_page='clientes')
 
 @app.route('/api/buscar_clientes')
+@user_required
 def api_buscar_clientes():
     query = request.args.get('query', '').strip()
     tipo_busqueda = request.args.get('tipo', 'todos')
@@ -1000,11 +1029,15 @@ def api_buscar_clientes():
         return jsonify({'error': f'Error al buscar clientes: {str(e)}'}), 500
     
 @app.route('/cargar_prestamo/<int:id_cliente>')
+@login_required
+@admin_required
 def cargar_prestamo(id_cliente):
     cliente = Cliente.query.get_or_404(id_cliente)
-    return render_template('cargar_prestamo.html', cliente=cliente)
+    return render_template('cargar_prestamo.html', cliente=cliente, active_page='prestamos')
 
 @app.route('/guardar_prestamo', methods=['POST'])
+@login_required
+@admin_required
 def guardar_prestamo():
     try:
         # Obtener datos del formulario
@@ -1105,38 +1138,17 @@ def guardar_prestamo():
 
 
 @app.route('/eliminar_cliente/<int:id>', methods=['POST'])
+@login_required
+@admin_required
 def eliminar_cliente(id):
-    app.logger.info(f'Iniciando eliminación del cliente {id}')
-    
     try:
         cliente = Cliente.query.get_or_404(id)
-        app.logger.info(f'Cliente encontrado: {cliente.nombre} {cliente.apellido}')
-        
-        # Obtener y contar préstamos
-        prestamos = Prestamo.query.filter_by(id_cliente=id).all()
-        app.logger.info(f'Préstamos encontrados: {len(prestamos)}')
-        
-        # Para cada préstamo, eliminar sus cuotas
-        for prestamo in prestamos:
-            cuotas = Cuota.query.filter_by(id_prestamo=prestamo.id_prestamo).all()
-            app.logger.info(f'Cuotas encontradas para préstamo {prestamo.id_prestamo}: {len(cuotas)}')
-            Cuota.query.filter_by(id_prestamo=prestamo.id_prestamo).delete()
-        
-        # Eliminar préstamos
-        Prestamo.query.filter_by(id_cliente=id).delete()
-        
-        # Eliminar cliente
         db.session.delete(cliente)
         db.session.commit()
-        
-        app.logger.info('Eliminación completada exitosamente')
-        flash(f'Cliente {cliente.nombre} {cliente.apellido} y todos sus datos relacionados han sido eliminados correctamente', 'success')
-        
+        flash('Cliente eliminado exitosamente', 'success')
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f'Error durante la eliminación: {str(e)}')
         flash(f'Error al eliminar el cliente: {str(e)}', 'error')
-        
     return redirect(url_for('clientes'))
 
 
@@ -1201,30 +1213,6 @@ def debug_schema():
         return html
     except Exception as e:
         return f'Error al inspeccionar la base de datos: {str(e)}'
-    
-@app.route('/cleanup_db')
-def cleanup_db():
-    try:
-        with db.engine.connect() as conn:
-            # Desactivar temporalmente las restricciones de clave foránea
-            conn.execute(text("PRAGMA foreign_keys = OFF"))
-
-            # Eliminar en orden correcto (primero las tablas hijas)
-            conn.execute(text("DELETE FROM cuota"))
-            conn.execute(text("DELETE FROM prestamo"))
-            conn.execute(text("DELETE FROM cliente"))
-            conn.execute(text("DELETE FROM garante"))
-            
-            # Reactivar las restricciones de clave foránea
-            conn.execute(text("PRAGMA foreign_keys = ON"))
-            
-            # Confirmar los cambios
-            conn.commit()
-            
-            return "Limpieza de base de datos completada exitosamente"
-            
-    except Exception as e:
-        return f"Error limpiando la base de datos: {str(e)}"
 
 def init_db():
     """Función para inicializar/verificar la base de datos"""
@@ -1254,6 +1242,8 @@ def init_db():
             print("Base de datos inicializada exitosamente!")
 
 @app.route('/actualizar_estado_cuota', methods=['POST'])
+@login_required
+@admin_required
 def actualizar_estado_cuota():
     try:
         data = request.get_json()
@@ -1274,6 +1264,7 @@ def actualizar_estado_cuota():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/buscar_garante/<dni>')
+@user_required
 def buscar_garante(dni):
     garante = Garante.query.filter_by(dni=dni).first()
     
@@ -1294,18 +1285,23 @@ def buscar_garante(dni):
         })
 
 @app.route('/admin')
+@login_required
+@admin_required
 def admin():
     # Obtener todos los datos de cada tabla
     clientes = Cliente.query.all()
     prestamos = Prestamo.query.all()
     cuotas = Cuota.query.all()
     garantes = Garante.query.all()
+    users = User.query.all()
 
     return render_template('admin.html', 
                          clientes=clientes,
                          prestamos=prestamos,
                          cuotas=cuotas,
-                         garantes=garantes)
+                         garantes=garantes,
+                         users=users,
+                         active_page='admin')
 
 @app.route('/test_bcra/<cuit>')
 def test_bcra(cuit):
@@ -1407,6 +1403,7 @@ def generar_contrato(prestamo_id):
             '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
             '{dni}': cliente.dni,
             '{domicilio}': cliente.direccion or '',
+            '{telefono}': cliente.telefono or '',
             '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
             '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado),
             '{cantidad_cuotas}': str(prestamo.cuotas_totales),
@@ -1420,6 +1417,7 @@ def generar_contrato(prestamo_id):
                 '{nombre_apellido_garante}': f"{garante.nombre} {garante.apellido}",
                 '{dni_garante}': garante.dni,
                 '{domicilio_garante}': garante.direccion or '',
+                '{telefono_garante}': garante.telefono or ''
             })
         
         # Reemplazar en el documento
@@ -1506,6 +1504,7 @@ def numero_a_letras(numero):
     return num2words(numero, lang='es').upper()
 
 @app.route('/dni/<string:dni>')
+@user_required
 def ver_dni(dni):
     try:
         # Buscar como cliente
@@ -1599,6 +1598,13 @@ def ver_dni(dni):
         
     except Exception as e:
         return f"<pre>Error al procesar la consulta: {str(e)}</pre>"
+
+@app.route('/seleccionar_cliente_prestamo')
+@login_required
+@admin_required
+def seleccionar_cliente_prestamo():
+    clientes = Cliente.query.order_by(Cliente.apellido).all()
+    return render_template('seleccionar_cliente_prestamo.html', clientes=clientes, active_page='cargar_prestamo')
 
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")

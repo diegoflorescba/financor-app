@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block content %}
+{% block main_content %}
 <div class="container mt-5">
     <div class="card shadow">
         <div class="card-header bg-primary text-white">
@@ -15,7 +15,8 @@
             {% endif %}
             {% endwith %}
 
-            <form method="POST" action="{{ url_for('registro') }}">
+            <form method="POST" action="{{ url_for('nuevo_cliente') }}" id="clienteForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <!-- Datos Personales -->
                 <div class="mb-5">
                     <h4 class="border-bottom pb-2 mb-4">Datos Personales</h4>
@@ -108,7 +109,7 @@
                         <label for="fecha_vencimiento_primera_cuota" class="form-label">Fecha Vencimiento Primera Cuota
                             *</label>
                         <input type="date" class="form-control form-control-lg" id="fecha_vencimiento_primera_cuota"
-                            name="fecha_vencimiento_primera_cuota" required>
+                            name="fecha_vencimiento_primera_cuota">
                     </div>
 
                     <div class="form-group">
@@ -173,7 +174,7 @@
 
                 <!-- Botones -->
                 <div class="mt-5">
-                    <button type="submit" class="btn btn-success btn-lg">
+                    <button type="submit" class="btn btn-success btn-lg" id="submitButton">
                         <span class="px-5">Guardar</span>
                     </button>
                     <button type="button" onclick="window.location.href='{{ url_for('clientes') }}'"
@@ -382,9 +383,23 @@
             if (tienePrestamo && tienePrestamo.checked) {
                 seccionPrestamo.style.display = 'block';
                 seccionGarante.style.display = 'block';
+                // Hacer los campos requeridos cuando se muestra la sección
+                document.getElementById('monto_prestado').required = true;
+                document.getElementById('tasa_interes').required = true;
+                document.getElementById('cuotas_totales').required = true;
+                document.getElementById('monto_cuotas').required = true;
+                document.getElementById('fecha_inicio').required = true;
+                document.getElementById('fecha_vencimiento_primera_cuota').required = true;
             } else {
                 seccionPrestamo.style.display = 'none';
                 seccionGarante.style.display = 'none';
+                // Quitar el requerido cuando se oculta la sección
+                document.getElementById('monto_prestado').required = false;
+                document.getElementById('tasa_interes').required = false;
+                document.getElementById('cuotas_totales').required = false;
+                document.getElementById('monto_cuotas').required = false;
+                document.getElementById('fecha_inicio').required = false;
+                document.getElementById('fecha_vencimiento_primera_cuota').required = false;
                 // Limpiar campos del préstamo
                 if (document.getElementById('tiene_garante')) {
                     document.getElementById('tiene_garante').checked = false;
@@ -438,6 +453,44 @@
         if (tieneGarante) {
             tieneGarante.addEventListener('change', toggleSeccionGarante);
             toggleSeccionGarante();
+        }
+
+        // Validación del formulario
+        const form = document.getElementById('clienteForm');
+        const submitButton = document.getElementById('submitButton');
+
+        if (form) {
+            form.addEventListener('submit', function (event) {
+                const nombre = document.getElementById('nombre').value;
+                const apellido = document.getElementById('apellido').value;
+                const dni = document.getElementById('dni').value;
+
+                if (!nombre || !apellido || !dni) {
+                    event.preventDefault();
+                    alert('Por favor complete los campos obligatorios: Nombre, Apellido y DNI');
+                    return false;
+                }
+
+                // Si se incluye préstamo, validar campos del préstamo
+                if (document.getElementById('tiene_prestamo').checked) {
+                    const montoPrestado = document.getElementById('monto_prestado').value;
+                    const tasaInteres = document.getElementById('tasa_interes').value;
+                    const cuotasTotales = document.getElementById('cuotas_totales').value;
+                    const montoCuotas = document.getElementById('monto_cuotas').value;
+                    const fechaInicio = document.getElementById('fecha_inicio').value;
+                    const fechaVencimiento = document.getElementById('fecha_vencimiento_primera_cuota').value;
+
+                    if (!montoPrestado || !tasaInteres || !cuotasTotales || !montoCuotas || !fechaInicio || !fechaVencimiento) {
+                        event.preventDefault();
+                        alert('Por favor complete todos los campos del préstamo');
+                        return false;
+                    }
+                }
+
+                // Deshabilitar el botón para evitar doble envío
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<span class="px-5">Guardando...</span>';
+            });
         }
     });
 

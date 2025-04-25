@@ -1,0 +1,43 @@
+{% extends "layout.html" %}
+
+{% block main_content %}
+<div class="container mt-5">
+    <div class="card shadow">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold">
+                <i class="fas fa-user-plus me-2"></i>
+                Seleccionar Cliente para Nuevo Préstamo
+            </h2>
+        </div>
+        <div class="card-body p-4">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>DNI</th>
+                            <th>Apellido</th>
+                            <th>Nombre</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cliente in clientes %}
+                        <tr>
+                            <td>{{ cliente.dni }}</td>
+                            <td>{{ cliente.apellido }}</td>
+                            <td>{{ cliente.nombre }}</td>
+                            <td>
+                                <a href="{{ url_for('cargar_prestamo', id_cliente=cliente.id_cliente) }}"
+                                    class="btn btn-primary btn-sm">
+                                    <i class="fas fa-plus-circle"></i> Cargar Préstamo
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
