@@ -1,148 +1,222 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="reports-container">
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-purple-100 text-dark py-3">
-            <h2 class="mb-0 text-center fs-3 fw-bold">
-                <i class="fas fa-chart-bar me-2"></i>
-                Reportes del Sistema
-            </h2>
+<div class="container h-100">
+    <div class="row justify-content-center g-3">
+        <div class="col-12">
+            <!-- Título principal -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-purple-100 text-dark py-3">
+                    <h2 class="mb-0 text-center fs-3 fw-bold">
+                        <i class="fas fa-chart-bar me-2"></i>
+                        Reportes del Sistema
+                    </h2>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <!-- Nuevo panel de resumen financiero -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <div class="row">
+        <!-- Panel de resumen financiero -->
+        <div class="col-12">
+            <div class="row g-3">
                 <div class="col-md-4">
                     <div class="financial-summary">
-                        <h3 class="text-primary">
+                        <div class="summary-title">
                             <i class="fas fa-dollar-sign"></i> Total Adeudado General
-                        </h3>
-                        <p class="h2 text-success">
+                        </div>
+                        <div class="summary-amount text-success">
                             ${{ "{:,.2f}".format(total_adeudado).replace(',', '.') }}
-                        </p>
+                        </div>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="financial-summary">
-                        <h3 class="text-primary">
+                        <div class="summary-title">
                             <i class="fas fa-calendar-alt"></i> Adeudado {{ mes_actual }}
-                        </h3>
-                        <p class="h2 text-warning">
+                        </div>
+                        <div class="summary-amount text-warning">
                             ${{ "{:,.2f}".format(adeudado_mes_actual).replace(',', '.') }}
-                        </p>
+                        </div>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="financial-summary">
-                        <h3 class="text-primary">
+                        <div class="summary-title">
                             <i class="fas fa-calendar-plus"></i> A Cobrar {{ mes_siguiente }}
-                        </h3>
-                        <p class="h2 text-info">
+                        </div>
+                        <div class="summary-amount text-info">
                             ${{ "{:,.2f}".format(adeudado_mes_siguiente).replace(',', '.') }}
-                        </p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <div class="report-card">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-purple-100 text-dark py-3">
-                <h2 class="mb-0 text-center fs-3 fw-bold">
-                    <i class="fas fa-file-invoice-dollar me-2"></i>
-                    Préstamos Activos - {{ mes_actual }}
-                </h2>
-            </div>
-            <div class="card-body">
-                <div class="report-actions">
-                    <a href="{{ url_for('exportar_excel') }}" class="btn-action">
-                        <i class="fas fa-file-excel"></i> Exportar Excel
-                    </a>
-                    <a href="#" class="btn-action" onclick="window.print()">
-                        <i class="fas fa-file-pdf"></i> Imprimir PDF
-                    </a>
+        <!-- Tabla de Préstamos -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-purple-100 text-dark py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0 fs-3 fw-bold">
+                            <i class="fas fa-file-invoice-dollar me-2"></i>
+                            Préstamos Activos - {{ mes_actual }}
+                        </h2>
+                        <div>
+                            <a href="{{ url_for('exportar_excel') }}" class="btn btn-outline-success btn-sm me-2">
+                                <i class="fas fa-file-excel me-2"></i>Exportar Excel
+                            </a>
+                            <a href="#" class="btn btn-outline-primary btn-sm" onclick="window.print()">
+                                <i class="fas fa-file-pdf me-2"></i>Imprimir PDF
+                            </a>
+                        </div>
+                    </div>
                 </div>
-
-                <div class="report-table-wrapper">
-                    <table class="report-table">
-                        <thead>
-                            <tr>
-                                <th>Cliente</th>
-                                <th>Teléfono</th>
-                                <th>Fecha Inicio</th>
-                                <th>Monto Prestado</th>
-                                <th>Cuotas</th>
-                                <th>Monto Cuota</th>
-                                <th>Adeudado</th>
-                                <th>Estado</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for prestamo in prestamos %}
-                            <tr>
-                                <td>{{ prestamo.cliente.apellido }}, {{ prestamo.cliente.nombre }}</td>
-                                <td>{{ prestamo.cliente.telefono }}</td>
-                                <td>{{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</td>
-                                <td class="text-right">${{ "{:,.2f}".format(prestamo.monto_prestado).replace(',', '.')
-                                    }}</td>
-                                <td class="text-center">{{ prestamo.cuotas_totales - prestamo.cuotas_pendientes }}/{{
-                                    prestamo.cuotas_totales }}</td>
-                                <td class="text-right">${{ "{:,.2f}".format(prestamo.monto_cuotas).replace(',', '.') }}
-                                </td>
-                                <td class="text-right">${{ "{:,.2f}".format(prestamo.monto_adeudado).replace(',', '.')
-                                    }}</td>
-                                <td class="text-center">
-                                    <span class="status-badge {{ prestamo.estado }}">
-                                        {{ prestamo.estado }}
-                                    </span>
-                                </td>
-                                <td class="text-center">
-                                    <a href="{{ url_for('ver_cliente', id=prestamo.cliente.id_cliente) }}"
-                                        class="btn-icon" title="Ver detalles">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Cliente</th>
+                                    <th>Teléfono</th>
+                                    <th>Fecha Inicio</th>
+                                    <th class="text-end">Monto Prestado</th>
+                                    <th class="text-center">Cuotas</th>
+                                    <th class="text-end">Monto Cuota</th>
+                                    <th class="text-end">Adeudado</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for prestamo in prestamos %}
+                                <tr>
+                                    <td>{{ prestamo.cliente.apellido }}, {{ prestamo.cliente.nombre }}</td>
+                                    <td>{{ prestamo.cliente.telefono }}</td>
+                                    <td>{{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+                                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_prestado).replace(',', '.')
+                                        }}</td>
+                                    <td class="text-center">{{ prestamo.cuotas_totales - prestamo.cuotas_pendientes
+                                        }}/{{ prestamo.cuotas_totales }}</td>
+                                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_cuotas).replace(',', '.')
+                                        }}</td>
+                                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_adeudado).replace(',', '.')
+                                        }}</td>
+                                    <td class="text-center">
+                                        <span class="badge {{ prestamo.estado | lower }}-badge">
+                                            {{ prestamo.estado }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{{ url_for('ver_cliente', id=prestamo.cliente.id_cliente) }}"
+                                            class="btn btn-sm btn-outline-primary" title="Ver detalles">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Agregar estilos específicos -->
 <style>
+    .container {
+        padding: 1.5rem;
+        min-height: calc(100vh - 60px);
+        /* Ajusta este valor según el alto de tu navbar */
+    }
+
     .financial-summary {
-        padding: 1.8rem;
+        padding: 1.25rem;
         text-align: center;
         background-color: #f8f9fa;
         border-radius: 8px;
-        margin-bottom: 1rem;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        width: 100%;
     }
 
-    .financial-summary h3 {
-        font-size: 1.2rem;
-        margin-bottom: 1.2rem;
-        color: #2c3e50;
+    .summary-title {
+        font-size: 0.9rem;
+        color: #007bff;
         font-weight: 600;
+        margin-bottom: 0.75rem;
+        white-space: nowrap;
     }
 
-    .financial-summary p {
-        margin: 0;
+    .summary-amount {
+        font-size: 1.2rem;
         font-weight: bold;
-        font-size: 1.8rem;
-        /* Reducido de 2.5rem a 1.8rem */
-        line-height: 1.2;
+        line-height: 1;
+        white-space: nowrap;
     }
 
+    .financial-summary:hover {
+        transform: translateY(-2px);
+        transition: transform 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Estilos para la tabla */
+    .table-responsive {
+        margin: 0;
+        padding: 0;
+    }
+
+    .table {
+        margin-bottom: 0;
+    }
+
+    .table th {
+        background-color: #f3f4f6;
+        border-bottom: 2px solid #e5e7eb;
+        font-weight: 600;
+        color: #374151;
+        white-space: nowrap;
+        padding: 1rem;
+    }
+
+    .table td {
+        padding: 0.75rem 1rem;
+        vertical-align: middle;
+    }
+
+    .table tbody tr:hover {
+        background-color: #f9fafb;
+    }
+
+    /* Badges para estados */
+    .activo-badge {
+        background-color: #dcfce7;
+        color: #166534;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+    }
+
+    .finalizado-badge {
+        background-color: #f3f4f6;
+        color: #374151;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+    }
+
+    .atrasado-badge {
+        background-color: #fee2e2;
+        color: #991b1b;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+    }
+
+    /* Colores para los montos */
     .text-success {
         color: #28a745 !important;
     }
@@ -155,11 +229,17 @@
         color: #007bff !important;
     }
 
-    /* Añadir efecto hover suave */
-    .financial-summary:hover {
-        transform: translateY(-2px);
-        transition: transform 0.3s ease;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    .text-info {
+        color: #17a2b8 !important;
+    }
+
+    /* Card styles */
+    .card {
+        margin-bottom: 0;
+    }
+
+    .card-body {
+        padding: 1rem;
     }
 </style>
 {% endblock %}
