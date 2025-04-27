@@ -1,10 +1,13 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="container">
+<div class="container mt-5">
     <div class="card shadow">
-        <div class="card-header bg-primary text-white">
-            <h2 class="mb-0 text-center">Nuevo Préstamo para {{ cliente.nombre }} {{ cliente.apellido }}</h2>
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold">
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Nuevo Préstamo para {{ cliente.nombre }} {{ cliente.apellido }}
+            </h2>
         </div>
         <div class="card-body p-4">
             <form id="prestamo-form" method="POST" action="{{ url_for('guardar_prestamo') }}">
@@ -13,6 +16,8 @@
 
                 <!-- Campos del formulario  -->
                 <div class="mb-5">
+                    <h4 class="border-bottom pb-2 mb-4 text-purple">Datos del Préstamo</h4>
+
                     <!-- Monto Prestado -->
                     <div class="form-group">
                         <label for="monto_prestado" class="form-label">Monto Prestado *</label>
@@ -45,7 +50,7 @@
                     <div class="form-group">
                         <label for="monto_adeudado" class="form-label">Monto Total</label>
                         <input type="text" id="monto_adeudado" name="monto_adeudado"
-                            class="form-control form-control-lg" readonly>
+                            class="form-control form-control-lg bg-light" readonly>
                     </div>
 
                     <!-- Fecha de Inicio -->
@@ -55,7 +60,7 @@
                             required>
                     </div>
 
-                    <!-- Después de fecha_inicio y antes de fecha_finalizacion -->
+                    <!-- Fecha Primera Cuota -->
                     <div class="form-group">
                         <label for="fecha_vencimiento_primera_cuota" class="form-label">Fecha Vencimiento Primera Cuota
                             *</label>
@@ -65,15 +70,15 @@
 
                     <!-- Fecha de Finalizacion -->
                     <div class="form-group">
-                        <label for="fecha_finalizacion" class="form-label">Fecha de Finalizacion</label>
+                        <label for="fecha_finalizacion" class="form-label">Fecha de Finalización</label>
                         <input type="text" id="fecha_finalizacion" name="fecha_finalizacion"
-                            class="form-control form-control-lg" readonly>
+                            class="form-control form-control-lg bg-light" readonly>
                     </div>
                 </div>
 
-                <!-- Después de los datos del préstamo y antes de los botones, agregamos la sección del garante -->
+                <!-- Sección del garante -->
                 <div class="card shadow mt-4 mb-4">
-                    <div class="card-header bg-primary text-white">
+                    <div class="card-header bg-indigo text-white">
                         <h4 class="mb-0">Datos del Garante (Opcional)</h4>
                     </div>
                     <div class="card-body">
@@ -86,11 +91,11 @@
                             <!-- DNI Garante con botón de búsqueda -->
                             <div class="form-group">
                                 <label for="dni_garante" class="form-label">DNI Garante *</label>
-                                <div class="d-flex align-items-center">
+                                <div class="d-flex align-items-center gap-2">
                                     <input type="text" id="dni_garante" name="dni_garante"
                                         class="form-control form-control-lg">
-                                    <button type="button" class="btn btn-primary ms-2" onclick="buscarGarante()">
-                                        <i class="fas fa-search"></i> Buscar
+                                    <button type="button" class="btn btn-indigo" onclick="buscarGarante()">
+                                        <i class="fas fa-search me-2"></i>Buscar
                                     </button>
                                 </div>
                             </div>
@@ -135,11 +140,13 @@
 
                 <!-- Botones -->
                 <div class="mt-5">
-                    <button type="submit" class="btn btn-success btn-lg">
-                        <span class="px-5">Guardar Préstamo</span>
+                    <button type="submit" class="btn btn-purple btn-lg">
+                        <i class="fas fa-save me-2"></i>
+                        <span class="px-3">Guardar Préstamo</span>
                     </button>
-                    <button type="button" onclick="window.history.back()" class="btn btn-danger btn-lg ms-3">
-                        <span class="px-5">Cancelar</span>
+                    <button type="button" onclick="window.history.back()" class="btn btn-outline-danger btn-lg ms-3">
+                        <i class="fas fa-times me-2"></i>
+                        <span class="px-3">Cancelar</span>
                     </button>
                 </div>
             </form>
@@ -148,7 +155,7 @@
 
     <!-- Vista Previa de Cuotas -->
     <div class="card shadow mt-4">
-        <div class="card-header bg-primary text-white">
+        <div class="card-header bg-purple text-white">
             <h4 class="mb-0">Vista Previa de Cuotas</h4>
         </div>
         <div class="card-body">
@@ -172,18 +179,39 @@
 </div>
 
 <style>
+    /* Variables de colores */
+    :root {
+        --color-primary: #2563EB;
+        /* Un azul corporativo más sobrio */
+        --color-secondary: #1E40AF;
+        /* Azul más oscuro para elementos secundarios */
+        --color-danger: #DC2626;
+        /* Rojo más suave */
+        --color-gray: #4B5563;
+        /* Gris más oscuro para mejor legibilidad */
+        --color-hover: #1D4ED8;
+        /* Color hover para botones */
+    }
+
     /* Estilos para los campos del formulario */
     .form-control-lg {
-        height: 50px;
-        font-size: 1.1rem;
-        margin-bottom: 1.5rem;
+        height: 45px;
+        font-size: 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid #E5E7EB;
+        border-radius: 0.5rem;
+    }
+
+    .form-control-lg:focus {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.25);
     }
 
     /* Contenedor para cada campo del formulario */
     .form-group {
         display: flex;
         align-items: center;
-        margin-bottom: 1.5rem;
+        margin-bottom: 1.25rem;
         max-width: 800px;
     }
 
@@ -191,41 +219,137 @@
     .form-label {
         width: 200px;
         margin-bottom: 0;
-        font-size: 1.1rem;
+        font-size: 1rem;
+        font-weight: 500;
+        color: var(--color-gray);
         padding-right: 1rem;
     }
 
     /* Estilo para los inputs */
     .form-group .form-control-lg {
-        width: 300px;
+        flex: 1;
+        max-width: 400px;
         margin-bottom: 0;
+    }
+
+    /* Ajustes para los checkboxes */
+    .form-check {
+        margin-left: 200px;
+        margin-bottom: 1.25rem;
+    }
+
+    .form-check-input {
+        width: 1.2em;
+        height: 1.2em;
+        margin-top: 0.25em;
+        border-color: var(--color-gray);
+    }
+
+    .form-check-input:checked {
+        background-color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+
+    /* Ajustes para la tabla */
+    .table {
+        margin-bottom: 0;
+    }
+
+    .table td,
+    .table th {
+        padding: 1rem;
+        vertical-align: middle;
+    }
+
+    .table thead th {
+        background-color: rgba(37, 99, 235, 0.1);
+        border-bottom: 2px solid rgba(37, 99, 235, 0.2);
     }
 
     /* Para campos de solo lectura */
     .form-control-lg[readonly] {
-        background-color: #f8f9fa;
+        background-color: #F9FAFB;
+        border-color: #E5E7EB;
     }
 
-    /* Ajustes para la tabla */
-    .table td,
-    .table th {
-        padding: 1rem;
+    /* Estilos para las secciones */
+    .text-purple {
+        color: var(--color-primary) !important;
     }
 
-    .is-invalid {
-        border-color: #dc3545 !important;
+    .bg-purple {
+        background-color: var(--color-primary) !important;
     }
 
-    #datos_garante .form-group {
-        margin-bottom: 1rem;
+    .bg-indigo {
+        background-color: var(--color-secondary) !important;
     }
 
-    .form-check {
-        padding-left: 1.5rem;
+    /* Estilos para los botones */
+    .btn-purple {
+        background-color: var(--color-primary);
+        border-color: var(--color-primary);
+        color: white;
     }
 
-    .form-check-input {
-        margin-left: -1.5rem;
+    .btn-purple:hover {
+        background-color: var(--color-hover);
+        border-color: var(--color-hover);
+        color: white;
+    }
+
+    .btn-indigo {
+        background-color: var(--color-secondary);
+        border-color: var(--color-secondary);
+        color: white;
+    }
+
+    .btn-indigo:hover {
+        background-color: var(--color-hover);
+        border-color: var(--color-hover);
+        color: white;
+    }
+
+    .btn-outline-danger {
+        color: var(--color-danger);
+        border-color: var(--color-danger);
+    }
+
+    .btn-outline-danger:hover {
+        background-color: var(--color-danger);
+        border-color: var(--color-danger);
+        color: white;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .form-group {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .form-label {
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group .form-control-lg {
+            width: 100%;
+            max-width: none;
+        }
+
+        .form-check {
+            margin-left: 0;
+        }
+
+        .d-flex.align-items-center.gap-2 {
+            flex-direction: column;
+            gap: 0.5rem !important;
+        }
+
+        .d-flex.align-items-center.gap-2 .btn {
+            width: 100%;
+        }
     }
 </style>
 

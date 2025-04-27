@@ -19,13 +19,13 @@
         /* Estilos del logo */
         .navbar-brand {
             padding: 0;
-            min-width: 160px;
+            min-width: 120px;
             display: flex;
             align-items: center;
         }
 
         .navbar-brand img {
-            height: 60px;
+            height: 50px;
             width: auto;
             object-fit: contain;
         }
@@ -103,9 +103,10 @@
 
         /* Contenedor principal */
         .container {
-            max-width: 95% !important;
+            width: 100%;
+            max-width: 95%;
             margin: 0 auto;
-            padding: 0 20px;
+            padding: 0 1rem;
         }
 
         /* Estilos para las tablas */
@@ -210,6 +211,73 @@
             background-color: #f8d7da;
             border-color: #f5c2c7;
         }
+
+        /* Media queries para responsividad */
+        @media (max-width: 768px) {
+            .navbar-brand {
+                min-width: 100px;
+            }
+
+            .navbar-brand img {
+                height: 40px;
+            }
+
+            .navbar-nav {
+                flex-direction: column;
+                align-items: flex-start;
+                width: 100%;
+            }
+
+            .nav-item {
+                width: 100%;
+            }
+
+            .nav-link {
+                width: 100%;
+                padding: 0.5rem 1rem !important;
+            }
+
+            .container {
+                padding: 0 0.5rem;
+            }
+
+            .table th,
+            .table td {
+                padding: 0.5rem;
+                font-size: 0.875rem;
+            }
+
+            .card {
+                margin-bottom: 0.5rem;
+            }
+
+            .card-body {
+                padding: 1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .navbar-brand {
+                min-width: 80px;
+            }
+
+            .navbar-brand img {
+                height: 30px;
+            }
+
+            .nav-link {
+                font-size: 0.75rem;
+                padding: 0.375rem 0.75rem !important;
+            }
+
+            .nav-link i {
+                font-size: 0.875rem;
+            }
+
+            .container {
+                padding: 0 0.25rem;
+            }
+        }
     </style>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     {% block extra_head %}{% endblock %}
@@ -222,7 +290,8 @@
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <img src="{{ url_for('static', filename='img/logo-financor.png') }}" alt="Financor">
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
