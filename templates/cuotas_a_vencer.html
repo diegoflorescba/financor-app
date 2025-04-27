@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
-{% block main_content %}
-<div class="container mt-4">
+{% block content %}
+<div class="container">
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-purple-100 text-dark py-3">
             <h2 class="mb-0 text-center fs-3 fw-bold">
@@ -70,7 +70,8 @@
                                         class="btn-icon" title="Ver cliente">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    {% if not cuota.pagada and cuota.fecha_vencimiento.month == today.month %}
+                                    {% if not cuota.pagada and cuota.fecha_vencimiento.month == today.month and
+                                    current_user.is_admin %}
                                     <form action="{{ url_for('pagar_cuota', cuota_id=cuota.id_cuota) }}" method="POST">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn-icon success"

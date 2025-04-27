@@ -90,7 +90,7 @@ def create_user():
     try:
         username = request.form.get('username')
         password = request.form.get('password')
-        is_admin = request.form.get('is_admin') == 'on'
+        role = request.form.get('role', 'user')
         email = request.form.get('email')  # Email es opcional
 
         if not username or not password:
@@ -109,12 +109,12 @@ def create_user():
 
         new_user = User(
             username=username,
-            password=password,
             email=email,  # Puede ser None
-            role='admin' if is_admin else 'user',
+            role=role,
             is_active=True,
             created_by=current_user.id
         )
+        new_user.set_password(password)
 
         db.session.add(new_user)
         db.session.commit()

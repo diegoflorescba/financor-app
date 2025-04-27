@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_login import UserMixin
+from sqlalchemy.dialects.postgresql import JSON
 
 # Crear la instancia de SQLAlchemy
 db = SQLAlchemy()
@@ -13,18 +14,16 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
-    password = db.Column(db.String(128))  # Plain text password
-    role = db.Column(db.String(20), nullable=False, default='user')  # 'admin' o 'user'
+    password = db.Column(db.String(128))
+    role = db.Column(db.String(20), nullable=False, default='user')
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     updated_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     
-    # Relación self-referencial para created_by
+    # Relaciones
     creator = db.relationship('User', remote_side=[id], foreign_keys=[created_by], backref='created_users')
-    
-    # Relación self-referencial para updated_by
     updater = db.relationship('User', remote_side=[id], foreign_keys=[updated_by], backref='updated_users')
     
     # Relaciones
@@ -36,19 +35,17 @@ class User(UserMixin, db.Model):
                               foreign_keys='Prestamo.created_by',
                               backref=db.backref('created_by_user', lazy=True))
     
-    audit_logs = db.relationship('AuditLog',
-                               foreign_keys='AuditLog.user_id',
-                               backref=db.backref('user', lazy=True))
-    
     @property
     def is_admin(self):
         return self.role == 'admin'
     
     def set_password(self, password):
-        self.password = password
+        """Establece la contraseña del usuario."""
+        self.password = password  # En este caso guardamos la contraseña en texto plano
         
     def check_password(self, password):
-        return self.password == password
+        """Verifica la contraseña del usuario."""
+        return self.password == password  # Comparación directa ya que está en texto plano
     
     def __repr__(self):
         return f'<User {self.username}>'
@@ -56,16 +53,18 @@ class User(UserMixin, db.Model):
 class AuditLog(db.Model):
     __tablename__ = 'audit_log'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    action = db.Column(db.String(50), nullable=False)  # 'create', 'update', 'delete'
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(50), nullable=False)  # create, update, delete
     table_name = db.Column(db.String(50), nullable=False)
     record_id = db.Column(db.Integer, nullable=False)
-    changes = db.Column(db.JSON)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    changes = db.Column(JSON, nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
+    user = db.relationship('User', backref=db.backref('audit_logs', lazy=True))
+
     def __repr__(self):
-        return f'<AuditLog {self.action} on {self.table_name} by {self.user_id}>'
+        return f'<AuditLog {self.action} {self.table_name} {self.record_id}>'
 
 class Cliente(db.Model):
     __tablename__ = 'cliente'

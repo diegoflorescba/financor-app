@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
-{% block main_content %}
-<div class="container mt-4">
+{% block content %}
+<div class="container">
     <!-- Título de la página -->
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-purple-100 text-dark py-3">
@@ -78,8 +78,9 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="userForm">
-                    <input type="hidden" id="userId" name="userId">
+                <form id="userForm" method="POST" action="{{ url_for('auth.create_user') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" id="userId" name="user_id">
                     <div class="mb-3">
                         <label for="username" class="form-label">Nombre de Usuario</label>
                         <input type="text" class="form-control" id="username" name="username" required>
@@ -95,6 +96,10 @@
                             <option value="user">Usuario</option>
                             <option value="admin">Administrador</option>
                         </select>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="is_admin" name="is_admin">
+                        <label class="form-check-label" for="is_admin">¿Es administrador?</label>
                     </div>
                 </form>
             </div>
@@ -117,6 +122,7 @@
         document.getElementById('userId').value = '';
         document.getElementById('userModalLabel').textContent = 'Nuevo Usuario';
         document.getElementById('password').required = true;
+        document.getElementById('userForm').action = "{{ url_for('auth.create_user') }}";
         const modal = new bootstrap.Modal(document.getElementById('userModal'));
         modal.show();
     }
@@ -129,33 +135,59 @@
                 document.getElementById('userId').value = data.id;
                 document.getElementById('username').value = data.username;
                 document.getElementById('role').value = data.role;
+                document.getElementById('is_admin').checked = data.is_admin;
                 document.getElementById('password').required = false;
                 document.getElementById('userModalLabel').textContent = 'Editar Usuario';
+                document.getElementById('userForm').action = "{{ url_for('auth.update_user') }}";
                 const modal = new bootstrap.Modal(document.getElementById('userModal'));
                 modal.show();
             });
     }
 
     function saveUser() {
-        const formData = new FormData(document.getElementById('userForm'));
-        const data = Object.fromEntries(formData.entries());
+        const form = document.getElementById('userForm');
+        const formData = new FormData(form);
 
-        fetch(`/auth/${currentAction}_user`, {
+        const isAdmin = document.getElementById('is_admin').checked;
+        formData.set('role', isAdmin ? 'admin' : 'user');
+
+        fetch(form.action, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
+            body: formData
         })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    window.location.reload();
+            .then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
                 } else {
-                    alert(data.message || 'Error al guardar el usuario');
+                    return response.text().then(text => {
+                        try {
+                            return JSON.parse(text);
+                        } catch (e) {
+                            window.location.reload();
+                        }
+                    });
                 }
+            })
+            .then(data => {
+                if (data && !data.success) {
+                    alert(data.message || 'Error al guardar el usuario');
+                } else {
+                    window.location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al guardar el usuario');
             });
     }
+
+    document.getElementById('role').addEventListener('change', function () {
+        document.getElementById('is_admin').checked = this.value === 'admin';
+    });
+
+    document.getElementById('is_admin').addEventListener('change', function () {
+        document.getElementById('role').value = this.checked ? 'admin' : 'user';
+    });
 
     function toggleUserStatus(userId, currentStatus) {
         if (!confirm(`¿Está seguro que desea ${currentStatus ? 'desactivar' : 'activar'} este usuario?`)) {

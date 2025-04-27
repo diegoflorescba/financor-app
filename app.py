@@ -24,7 +24,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 
 # Configuración de la base de datos
-db_path = os.path.join(os.path.dirname(__file__), 'prestamos.db')
+db_path = os.path.join(os.path.dirname(__file__), 'instance', 'prestamos.db')
 db_dir = os.path.dirname(db_path)
 os.makedirs(db_dir, exist_ok=True)
 os.chmod(db_dir, 0o777)  # Dar permisos de lectura/escritura al directorio
@@ -106,7 +106,6 @@ def clientes():
 
 @app.route('/cliente/nuevo', methods=['GET', 'POST'])
 @login_required
-@admin_required
 def nuevo_cliente():
     if request.method == 'POST':
         try:
@@ -401,7 +400,6 @@ def ver_cliente(id):
 
 @app.route('/cliente/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
-@admin_required
 def editar_cliente(id):
     cliente = Cliente.query.get_or_404(id)
     
@@ -533,7 +531,6 @@ def pagar_cuota(cuota_id):
 
 @app.route('/crear_cliente', methods=['POST'])
 @login_required
-@admin_required
 def crear_cliente():
     try:
         nuevo_cliente = Cliente(
@@ -1030,14 +1027,12 @@ def api_buscar_clientes():
     
 @app.route('/cargar_prestamo/<int:id_cliente>')
 @login_required
-@admin_required
 def cargar_prestamo(id_cliente):
     cliente = Cliente.query.get_or_404(id_cliente)
     return render_template('cargar_prestamo.html', cliente=cliente, active_page='prestamos')
 
 @app.route('/guardar_prestamo', methods=['POST'])
 @login_required
-@admin_required
 def guardar_prestamo():
     try:
         # Obtener datos del formulario
@@ -1066,6 +1061,18 @@ def guardar_prestamo():
         
         db.session.add(nuevo_prestamo)
         db.session.flush()  # Para obtener el id_prestamo
+
+        # Registrar la creación del préstamo en el log de auditoría
+        prestamo_data = {
+            'monto_prestado': monto_prestado,
+            'tasa_interes': tasa_interes,
+            'cuotas_totales': cuotas_totales,
+            'monto_cuotas': monto_cuotas,
+            'monto_adeudado': monto_adeudado,
+            'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
+            'fecha_vencimiento_primera_cuota': fecha_vencimiento_primera_cuota.strftime('%Y-%m-%d')
+        }
+        audit_change('create', 'prestamo', nuevo_prestamo.id_prestamo, changes=prestamo_data)
 
         # Crear las cuotas usando la fecha de vencimiento de la primera cuota
         fecha_actual = datetime.now().date()
@@ -1097,6 +1104,18 @@ def guardar_prestamo():
             
             db.session.add(cuota)
 
+            # Registrar la creación de cada cuota en el log de auditoría
+            cuota_data = {
+                'numero_cuota': i + 1,
+                'monto': monto_cuotas,
+                'fecha_vencimiento': fecha_vencimiento.strftime('%Y-%m-%d'),
+                'estado': 'PAGADA' if esta_pagada else 'PENDIENTE',
+                'monto_pagado': monto_cuotas if esta_pagada else 0,
+                'pagada': esta_pagada,
+                'fecha_pago': datetime.now().strftime('%Y-%m-%d') if esta_pagada else None
+            }
+            audit_change('create', 'cuota', cuota.id_cuota, changes=cuota_data)
+
         # Actualizar el préstamo con las cuotas pagadas
         nuevo_prestamo.cuotas_pendientes = cuotas_totales - cuotas_pagadas
         nuevo_prestamo.monto_adeudado = monto_adeudado - monto_pagado
@@ -1121,6 +1140,17 @@ def guardar_prestamo():
                 )
                 db.session.add(garante)
                 db.session.flush()  # Para obtener el id_garante
+
+                # Registrar la creación del garante en el log de auditoría
+                garante_data = {
+                    'nombre': request.form['nombre_garante'],
+                    'apellido': request.form['apellido_garante'],
+                    'dni': dni_garante,
+                    'telefono': request.form.get('telefono_garante', ''),
+                    'correo_electronico': request.form.get('correo_garante', ''),
+                    'direccion': request.form.get('direccion_garante', '')
+                }
+                audit_change('create', 'garante', garante.id_garante, changes=garante_data)
 
             id_garante = garante.id_garante
 
@@ -1601,7 +1631,6 @@ def ver_dni(dni):
 
 @app.route('/seleccionar_cliente_prestamo')
 @login_required
-@admin_required
 def seleccionar_cliente_prestamo():
     clientes = Cliente.query.order_by(Cliente.apellido).all()
     return render_template('seleccionar_cliente_prestamo.html', clientes=clientes, active_page='cargar_prestamo')

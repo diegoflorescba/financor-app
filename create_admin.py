@@ -8,8 +8,8 @@ def create_user(username, password, email=None, role='user'):
             existing_user = User.query.filter_by(username=username).first()
             if existing_user:
                 print(f"Error: El usuario '{username}' ya existe")
-                return
-            
+            return
+
             # Crear nuevo usuario
             user = User(
                 username=username,

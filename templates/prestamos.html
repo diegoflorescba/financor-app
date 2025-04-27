@@ -1,7 +1,7 @@
 {% extends 'layout.html' %}
 
-{% block main_content %}
-<div class="container mt-4">
+{% block content %}
+<div class="container">
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-purple-100 text-dark py-3">
             <h2 class="mb-0 text-center fs-3 fw-bold">
@@ -78,6 +78,7 @@
                                         </td>
                                         <td>
                                             <div class="form-check">
+                                                {% if current_user.is_admin %}
                                                 <input class="form-check-input" type="checkbox"
                                                     id="cuota-{{ cuota.id_cuota }}" {% if cuota.pagada %}checked{% endif
                                                     %}
@@ -85,6 +86,12 @@
                                                 <label class="form-check-label" for="cuota-{{ cuota.id_cuota }}">
                                                     Marcar como pagada
                                                 </label>
+                                                {% else %}
+                                                <span
+                                                    class="badge {% if cuota.pagada %}bg-success{% else %}bg-danger{% endif %}">
+                                                    {{ 'Pagada' if cuota.pagada else 'Pendiente' }}
+                                                </span>
+                                                {% endif %}
                                             </div>
                                         </td>
                                     </tr>
