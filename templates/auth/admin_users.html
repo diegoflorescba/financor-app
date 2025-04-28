@@ -148,37 +148,52 @@
         const form = document.getElementById('userForm');
         const formData = new FormData(form);
 
-        const isAdmin = document.getElementById('is_admin').checked;
-        formData.set('role', isAdmin ? 'admin' : 'user');
-
         fetch(form.action, {
             method: 'POST',
             body: formData
         })
-            .then(response => {
-                if (response.redirected) {
-                    window.location.href = response.url;
-                } else {
-                    return response.text().then(text => {
-                        try {
-                            return JSON.parse(text);
-                        } catch (e) {
-                            window.location.reload();
-                        }
-                    });
-                }
-            })
+            .then(response => response.json())
             .then(data => {
-                if (data && !data.success) {
-                    alert(data.message || 'Error al guardar el usuario');
+                if (data.success) {
+                    // Cerrar el modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('userModal'));
+                    modal.hide();
+
+                    // Mostrar mensaje de éxito
+                    showAlert(data.message, 'success');
+
+                    // Recargar la página después de un breve delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
                 } else {
-                    window.location.reload();
+                    // Mostrar mensaje de error
+                    showAlert(data.message, 'danger');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error al guardar el usuario');
+                showAlert('Error al procesar la solicitud', 'danger');
             });
+    }
+
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.role = 'alert';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+
+        // Insertar la alerta al principio del contenedor
+        const container = document.querySelector('.container');
+        container.insertBefore(alertDiv, container.firstChild);
+
+        // Auto-cerrar después de 3 segundos
+        setTimeout(() => {
+            alertDiv.remove();
+        }, 3000);
     }
 
     document.getElementById('role').addEventListener('change', function () {
@@ -202,7 +217,7 @@
                 if (data.success) {
                     window.location.reload();
                 } else {
-                    alert(data.message || 'Error al cambiar el estado del usuario');
+                    showAlert(data.message || 'Error al cambiar el estado del usuario', 'danger');
                 }
             });
     }
@@ -218,9 +233,9 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert('Contraseña restablecida con éxito. La nueva contraseña es: ' + data.password);
+                    showAlert('Contraseña restablecida con éxito. La nueva contraseña es: ' + data.password, 'success');
                 } else {
-                    alert(data.message || 'Error al restablecer la contraseña');
+                    showAlert(data.message || 'Error al restablecer la contraseña', 'danger');
                 }
             });
     }

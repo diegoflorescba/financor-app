@@ -91,45 +91,72 @@ def create_user():
         username = request.form.get('username')
         password = request.form.get('password')
         role = request.form.get('role', 'user')
-        email = request.form.get('email')  # Email es opcional
+        email = request.form.get('email')
+
+        print(f"Intentando crear usuario: {username}, rol: {role}")  # Debug log
 
         if not username or not password:
-            flash('Usuario y contraseña son requeridos', 'error')
-            return redirect(url_for('auth.admin_users'))
+            print("Error: Falta usuario o contraseña")  # Debug log
+            return jsonify({
+                'success': False,
+                'message': 'Usuario y contraseña son requeridos'
+            })
 
-        # Verificar si el usuario ya existe
-        if User.query.filter_by(username=username).first():
-            flash('El nombre de usuario ya existe', 'error')
-            return redirect(url_for('auth.admin_users'))
+        # Verificar si el usuario ya existe (case insensitive)
+        existing_user = User.query.filter(User.username.ilike(username)).first()
+        if existing_user:
+            print(f"Usuario existente encontrado: {existing_user.username}")  # Debug log
+            return jsonify({
+                'success': False,
+                'message': 'El nombre de usuario ya existe'
+            })
 
-        # Verificar si el email ya existe (si se proporcionó uno)
-        if email and User.query.filter_by(email=email).first():
-            flash('El correo electrónico ya está en uso', 'error')
-            return redirect(url_for('auth.admin_users'))
+        # Si no se proporciona email, usar uno por defecto basado en el username
+        if not email:
+            email = f"{username.lower()}@financor.com"
+
+        # Verificar si el email ya existe
+        existing_email = User.query.filter(User.email.ilike(email)).first()
+        if existing_email:
+            print(f"Email existente encontrado: {existing_email.email}")  # Debug log
+            return jsonify({
+                'success': False,
+                'message': 'El correo electrónico ya está en uso'
+            })
 
         new_user = User(
-            username=username,
-            email=email,  # Puede ser None
+            username=username.strip(),
+            email=email.strip(),  # Ahora siempre tendremos un email
             role=role,
             is_active=True,
             created_by=current_user.id
         )
-        new_user.set_password(password)
+        new_user.password = password
 
         db.session.add(new_user)
         db.session.commit()
 
+        print(f"Usuario creado exitosamente: {new_user.username}")  # Debug log
         audit_change('create', 'user', new_user.id)
-        flash('Usuario creado exitosamente', 'success')
+        return jsonify({
+            'success': True,
+            'message': 'Usuario creado exitosamente'
+        })
 
-    except IntegrityError:
+    except IntegrityError as e:
         db.session.rollback()
-        flash('Error: El nombre de usuario o correo electrónico ya existe', 'error')
+        print(f"Error de integridad: {str(e)}")  # Debug log
+        return jsonify({
+            'success': False,
+            'message': 'Error: El nombre de usuario o correo electrónico ya existe'
+        })
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al crear usuario: {str(e)}', 'error')
-
-    return redirect(url_for('auth.admin_users'))
+        print(f"Error inesperado: {str(e)}")  # Debug log
+        return jsonify({
+            'success': False,
+            'message': f'Error al crear usuario: {str(e)}'
+        })
 
 @auth.route('/user/<int:user_id>')
 @login_required

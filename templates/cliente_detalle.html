@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block main_content %}
+{% block content %}
 <div class="container mt-5">
     <div class="card shadow">
         <div class="card-header bg-primary text-white">
@@ -47,9 +47,11 @@
                                 </li>
                                 <li class="mb-2"><strong>Monto por cuota:</strong> ${{ prestamo.monto_cuotas }}</li>
                                 <li class="mb-2"><strong>Fecha inicio:</strong> {{
-                                    prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</li>
+                                    prestamo.fecha_inicio.strftime('%d/%m/%Y') if prestamo.fecha_inicio else 'No
+                                    establecida' }}</li>
                                 <li class="mb-2"><strong>Fecha finalización:</strong> {{
-                                    prestamo.fecha_finalizacion.strftime('%d/%m/%Y') }}</li>
+                                    prestamo.fecha_finalizacion.strftime('%d/%m/%Y') if prestamo.fecha_finalizacion else
+                                    'No establecida' }}</li>
                             </ul>
                         </div>
 
@@ -84,7 +86,8 @@
                                     {% for cuota in prestamo.cuotas %}
                                     <tr>
                                         <td>{{ cuota.numero_cuota }}</td>
-                                        <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                                        <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') if cuota.fecha_vencimiento
+                                            else 'No establecida' }}</td>
                                         <td>${{ cuota.monto }}</td>
                                         <td>
                                             {% if cuota.estado == 'PAGADA' %}

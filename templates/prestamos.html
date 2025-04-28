@@ -50,6 +50,12 @@
                                     class="btn btn-info btn-sm ms-2">
                                     <i class="fas fa-file-signature"></i> Generar Pagaré
                                 </a>
+                                {% if current_user.is_admin %}
+                                <button onclick="confirmarEliminarPrestamo({{ prestamo.id_prestamo }})"
+                                    class="btn btn-danger btn-sm ms-2">
+                                    <i class="fas fa-trash"></i> Eliminar Préstamo
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="card-body">
@@ -122,13 +128,19 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
             },
             body: JSON.stringify({
                 id_cuota: idCuota,
                 pagada: pagada
             })
         })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     // Actualizar el estado visual
@@ -145,7 +157,7 @@
                 } else {
                     // Si hay error, revertir el checkbox
                     document.getElementById(`cuota-${idCuota}`).checked = !pagada;
-                    alert('Error al actualizar el estado de la cuota');
+                    alert(data.error || 'Error al actualizar el estado de la cuota');
                 }
             })
             .catch(error => {
@@ -154,6 +166,53 @@
                 document.getElementById(`cuota-${idCuota}`).checked = !pagada;
                 alert('Error al actualizar el estado de la cuota');
             });
+    }
+
+    function confirmarEliminarPrestamo(idPrestamo) {
+        if (confirm('¿Está seguro que desea eliminar este préstamo? Esta acción no se puede deshacer.')) {
+            fetch(`/eliminar_prestamo/${idPrestamo}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        // Encontrar y eliminar la card del préstamo
+                        const prestamoCard = document.querySelector(`button[onclick="confirmarEliminarPrestamo(${idPrestamo})"]`)
+                            .closest('.card');
+
+                        if (prestamoCard) {
+                            // Verificar si este es el último préstamo del cliente
+                            const accordionBody = prestamoCard.closest('.accordion-body');
+                            const prestamosRestantes = accordionBody.querySelectorAll('.card').length;
+
+                            prestamoCard.remove();
+
+                            // Si era el último préstamo, mostrar mensaje
+                            if (prestamosRestantes === 1) {
+                                accordionBody.innerHTML = '<p class="text-muted">Este cliente no tiene préstamos registrados.</p>';
+                            }
+                        }
+
+                        // Mostrar mensaje de éxito
+                        alert('Préstamo eliminado exitosamente');
+                    } else {
+                        alert(data.error || 'Error al eliminar el préstamo');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al eliminar el préstamo');
+                });
+        }
     }
 </script>
 {% endblock %}

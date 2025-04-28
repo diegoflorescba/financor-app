@@ -1062,24 +1062,13 @@ def guardar_prestamo():
         db.session.add(nuevo_prestamo)
         db.session.flush()  # Para obtener el id_prestamo
 
-        # Registrar la creación del préstamo en el log de auditoría
-        prestamo_data = {
-            'monto_prestado': monto_prestado,
-            'tasa_interes': tasa_interes,
-            'cuotas_totales': cuotas_totales,
-            'monto_cuotas': monto_cuotas,
-            'monto_adeudado': monto_adeudado,
-            'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
-            'fecha_vencimiento_primera_cuota': fecha_vencimiento_primera_cuota.strftime('%Y-%m-%d')
-        }
-        audit_change('create', 'prestamo', nuevo_prestamo.id_prestamo, changes=prestamo_data)
-
         # Crear las cuotas usando la fecha de vencimiento de la primera cuota
         fecha_actual = datetime.now().date()
         fecha_primera_cuota = fecha_vencimiento_primera_cuota.date()
         
         cuotas_pagadas = 0
         monto_pagado = 0
+        cuotas_creadas = []  # Lista para almacenar las cuotas creadas
         
         for i in range(cuotas_totales):
             fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
@@ -1103,22 +1092,14 @@ def guardar_prestamo():
                 monto_pagado += monto_cuotas
             
             db.session.add(cuota)
-
-            # Registrar la creación de cada cuota en el log de auditoría
-            cuota_data = {
-                'numero_cuota': i + 1,
-                'monto': monto_cuotas,
-                'fecha_vencimiento': fecha_vencimiento.strftime('%Y-%m-%d'),
-                'estado': 'PAGADA' if esta_pagada else 'PENDIENTE',
-                'monto_pagado': monto_cuotas if esta_pagada else 0,
-                'pagada': esta_pagada,
-                'fecha_pago': datetime.now().strftime('%Y-%m-%d') if esta_pagada else None
-            }
-            audit_change('create', 'cuota', cuota.id_cuota, changes=cuota_data)
+            cuotas_creadas.append(cuota)  # Agregar la cuota a la lista
 
         # Actualizar el préstamo con las cuotas pagadas
         nuevo_prestamo.cuotas_pendientes = cuotas_totales - cuotas_pagadas
         nuevo_prestamo.monto_adeudado = monto_adeudado - monto_pagado
+
+        # Variable para almacenar el garante si se crea uno nuevo
+        nuevo_garante = None
 
         # Procesar garante si está incluido
         if 'tiene_garante' in request.form:
@@ -1140,24 +1121,51 @@ def guardar_prestamo():
                 )
                 db.session.add(garante)
                 db.session.flush()  # Para obtener el id_garante
-
-                # Registrar la creación del garante en el log de auditoría
-                garante_data = {
-                    'nombre': request.form['nombre_garante'],
-                    'apellido': request.form['apellido_garante'],
-                    'dni': dni_garante,
-                    'telefono': request.form.get('telefono_garante', ''),
-                    'correo_electronico': request.form.get('correo_garante', ''),
-                    'direccion': request.form.get('direccion_garante', '')
-                }
-                audit_change('create', 'garante', garante.id_garante, changes=garante_data)
+                nuevo_garante = garante  # Guardar referencia al nuevo garante
 
             id_garante = garante.id_garante
-
-            # Actualizar el préstamo con el nuevo garante
             nuevo_prestamo.id_garante = id_garante
 
+        # Hacer commit de todos los cambios
         db.session.commit()
+
+        # Registrar la creación del préstamo en el log de auditoría
+        prestamo_data = {
+            'monto_prestado': monto_prestado,
+            'tasa_interes': tasa_interes,
+            'cuotas_totales': cuotas_totales,
+            'monto_cuotas': monto_cuotas,
+            'monto_adeudado': monto_adeudado,
+            'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
+            'fecha_vencimiento_primera_cuota': fecha_vencimiento_primera_cuota.strftime('%Y-%m-%d')
+        }
+        audit_change('create', 'prestamo', nuevo_prestamo.id_prestamo, changes=prestamo_data)
+
+        # Registrar la creación de cada cuota en el log de auditoría
+        for cuota in cuotas_creadas:
+            cuota_data = {
+                'numero_cuota': cuota.numero_cuota,
+                'monto': cuota.monto,
+                'fecha_vencimiento': cuota.fecha_vencimiento.strftime('%Y-%m-%d'),
+                'estado': cuota.estado,
+                'monto_pagado': cuota.monto_pagado,
+                'pagada': cuota.pagada,
+                'fecha_pago': cuota.fecha_pago.strftime('%Y-%m-%d') if cuota.fecha_pago else None
+            }
+            audit_change('create', 'cuota', cuota.id_cuota, changes=cuota_data)
+
+        # Registrar la creación del garante en el log de auditoría si se creó uno nuevo
+        if nuevo_garante:
+            garante_data = {
+                'nombre': nuevo_garante.nombre,
+                'apellido': nuevo_garante.apellido,
+                'dni': nuevo_garante.dni,
+                'telefono': nuevo_garante.telefono,
+                'correo_electronico': nuevo_garante.correo_electronico,
+                'direccion': nuevo_garante.direccion
+            }
+            audit_change('create', 'garante', nuevo_garante.id_garante, changes=garante_data)
+
         flash('Préstamo guardado exitosamente', 'success')
         return redirect(url_for('prestamos'))
 
@@ -1634,6 +1642,59 @@ def ver_dni(dni):
 def seleccionar_cliente_prestamo():
     clientes = Cliente.query.order_by(Cliente.apellido).all()
     return render_template('seleccionar_cliente_prestamo.html', clientes=clientes, active_page='cargar_prestamo')
+
+@app.route('/eliminar_prestamo/<int:id_prestamo>', methods=['POST'])
+@login_required
+@admin_required
+def eliminar_prestamo(id_prestamo):
+    try:
+        prestamo = Prestamo.query.get_or_404(id_prestamo)
+        
+        # Store client ID and loan details before deletion
+        cliente_id = prestamo.id_cliente
+        prestamo_data = {
+            'id_prestamo': prestamo.id_prestamo,
+            'id_cliente': prestamo.id_cliente,
+            'monto_prestado': prestamo.monto_prestado,
+            'cuotas_totales': prestamo.cuotas_totales,
+            'fecha_inicio': prestamo.fecha_inicio.strftime('%Y-%m-%d'),
+            'estado': prestamo.estado
+        }
+        
+        # Get all related installments for audit
+        cuotas_data = [{
+            'id_cuota': cuota.id_cuota,
+            'numero_cuota': cuota.numero_cuota,
+            'monto': cuota.monto,
+            'estado': cuota.estado,
+            'fecha_vencimiento': cuota.fecha_vencimiento.strftime('%Y-%m-%d')
+        } for cuota in prestamo.cuotas]
+        
+        # Create audit log for loan deletion
+        audit_change('delete', 'prestamo', prestamo.id_prestamo, changes=prestamo_data)
+        
+        # Create audit logs for each installment deletion
+        for cuota_data in cuotas_data:
+            audit_change('delete', 'cuota', cuota_data['id_cuota'], changes=cuota_data)
+        
+        # Delete the loan (this will cascade delete related installments)
+        db.session.delete(prestamo)
+        db.session.commit()
+        
+        flash('Préstamo y sus cuotas eliminados exitosamente', 'success')
+        
+        # Return JSON response for AJAX request
+        return jsonify({
+            'success': True,
+            'message': 'Préstamo y sus cuotas eliminados exitosamente',
+            'cliente_id': cliente_id
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Error al eliminar el préstamo: {str(e)}'
+        }), 400
 
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")
