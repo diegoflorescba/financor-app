@@ -18,6 +18,7 @@ from flask_login import LoginManager, login_required, current_user, login_user, 
 from auth import admin_required, user_required, audit_change, get_changes
 from flask_wtf.csrf import CSRFProtect
 from auth_routes import auth
+from functools import wraps
 
 
 app = Flask(__name__)
@@ -1695,6 +1696,24 @@ def eliminar_prestamo(id_prestamo):
             'success': False,
             'error': f'Error al eliminar el préstamo: {str(e)}'
         }), 400
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            flash('No tienes permisos para acceder a esta función.', 'error')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def user_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            flash('Debes iniciar sesión para acceder a esta página.', 'error')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")
