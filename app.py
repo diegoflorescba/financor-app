@@ -19,6 +19,7 @@ from auth import admin_required, user_required, audit_change, get_changes
 from flask_wtf.csrf import CSRFProtect
 from auth_routes import auth
 from functools import wraps
+import zipfile
 
 
 app = Flask(__name__)
@@ -1446,6 +1447,7 @@ def generar_contrato(prestamo_id):
             '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
             '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado),
             '{cantidad_cuotas}': str(prestamo.cuotas_totales),
+            '{cantidad_cuotas_letras}': numero_a_letras(prestamo.cuotas_totales),
             '{monto_cuota}': f"${format_money(prestamo.monto_cuotas)}",
             '{monto_cuota_letras}': numero_a_letras(prestamo.monto_cuotas),
             '{fecha_primera_cuota}': prestamo.cuotas[0].fecha_vencimiento.strftime('%d/%m/%Y'),
@@ -1466,8 +1468,8 @@ def generar_contrato(prestamo_id):
                     paragraph.text = paragraph.text.replace(key, value)
         
         # Guardar temporalmente
-        temp_path = f'prestamos_app/temp/contrato_prestamo_{prestamo_id}.docx'
-        os.makedirs('prestamos_app/temp', exist_ok=True)
+        temp_path = f'temp/contrato_prestamo_{prestamo_id}.docx'
+        os.makedirs('temp', exist_ok=True)
         doc.save(temp_path)
         
         # Enviar archivo
@@ -1502,38 +1504,62 @@ def generar_pagare(prestamo_id):
         prestamo = Prestamo.query.get_or_404(prestamo_id)
         cliente = prestamo.cliente
         
-        # Cargar el template
-        doc = Document('templates/template_pagare.docx')
+        # Obtener todas las cuotas ordenadas por número
+        cuotas = Cuota.query.filter_by(id_prestamo=prestamo_id).order_by(Cuota.numero_cuota).all()
         
-        # Crear diccionario con los reemplazos necesarios
-        replacements = {
-            '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
-            '{domicilio}': cliente.direccion or '',
-            '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
-            '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado)
-        }
+        # Crear directorio temporal si no existe
+        os.makedirs('temp', exist_ok=True)
         
-        # Reemplazar en el documento
-        for paragraph in doc.paragraphs:
-            for key, value in replacements.items():
-                if key in paragraph.text:
-                    paragraph.text = paragraph.text.replace(key, value)
+        # Lista para almacenar los paths de los archivos generados
+        archivos_generados = []
         
-        # Guardar temporalmente
-        temp_path = f'prestamos_app/temp/pagare_prestamo_{prestamo_id}.docx'
-        os.makedirs('prestamos_app/temp', exist_ok=True)
-        doc.save(temp_path)
+        # Generar un pagaré por cada cuota
+        for cuota in cuotas:
+            # Cargar el template
+            doc = Document('templates/template_pagare.docx')
+            
+            # Crear diccionario con los reemplazos necesarios
+            replacements = {
+                '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
+                '{domicilio}': cliente.direccion or '',
+                '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
+                '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado),
+                '{cuota_mensual_letras}': numero_a_letras(cuota.monto),
+                '{mes_firma_pagare}': prestamo.fecha_inicio.strftime('%B').capitalize(),
+                '{dia_firma_pagare}': str(prestamo.fecha_inicio.day),
+                '{ano_pagare}': str(prestamo.fecha_inicio.year),
+                '{cuota_mensual_numeros}': f"${format_money(cuota.monto)}",
+                '{numero_pagare}': str(cuota.numero_cuota),
+                '{vencimiento_pagare}': cuota.fecha_vencimiento.strftime('%d/%m/%Y')
+            }
+            
+            # Reemplazar en el documento
+            for paragraph in doc.paragraphs:
+                for key, value in replacements.items():
+                    if key in paragraph.text:
+                        paragraph.text = paragraph.text.replace(key, value)
+            
+            # Guardar temporalmente
+            temp_path = f'temp/pagare_prestamo_{prestamo_id}_cuota_{cuota.numero_cuota}.docx'
+            doc.save(temp_path)
+            archivos_generados.append(temp_path)
         
-        # Enviar archivo
+        # Crear un archivo ZIP con todos los pagarés
+        zip_path = f'temp/pagares_prestamo_{prestamo_id}.zip'
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for archivo in archivos_generados:
+                zipf.write(archivo, os.path.basename(archivo))
+        
+        # Enviar archivo ZIP
         return send_file(
-            temp_path,
+            zip_path,
             as_attachment=True,
-            download_name=f'Pagare_Prestamo_{cliente.apellido}_{prestamo_id}.docx'
+            download_name=f'Pagarés_Prestamo_{cliente.apellido}_{prestamo_id}.zip'
         )
         
     except Exception as e:
         print(f"Error detallado: {str(e)}")  # Para debugging
-        flash(f'Error al generar el pagaré: {str(e)}', 'error')
+        flash(f'Error al generar los pagarés: {str(e)}', 'error')
         return redirect(url_for('prestamos'))
 
 def numero_a_letras(numero):
