@@ -16,7 +16,7 @@
     <div class="financial-summary">
         <div class="summary-content">
             <h3 class="text-primary">
-                <div class="summary-title">$ Total a Cobrar General</div>
+                <div class="summary-title">Total a Cobrar</div>
                 <div class="summary-amount">${{ "{:,.2f}".format(total_a_cobrar) }}</div>
             </h3>
         </div>
@@ -110,27 +110,42 @@
 
     /* Financial Summary Styles */
     .financial-summary {
-        background: #fff;
-        border-radius: 8px;
+        background: #f3f4f6;
+        border-radius: 12px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         margin: 1.5rem 0;
-        padding: 1.5rem;
+        padding: 2rem 1rem;
+        text-align: center;
     }
 
     .summary-content {
         text-align: center;
     }
 
+    .summary-content h3 {
+        margin: 0;
+        font-weight: normal;
+    }
+
     .summary-title {
-        color: #0066ff;
-        font-size: 1.2rem;
-        margin-bottom: 0.5rem;
+        color: #6B7280;
+        font-size: 1.3rem;
+        margin-bottom: 1rem;
+        font-weight: 600;
     }
 
     .summary-amount {
-        color: #00b300;
-        font-size: 2rem;
+        color: #6B7280;
+        font-size: 1.7rem;
         font-weight: bold;
+        letter-spacing: -0.5px;
+    }
+
+    .financial-summary:hover {
+        transform: translateY(-2px);
+        transition: transform 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background-color: #f8f9fa;
     }
 
     /* Table Section Styles */

@@ -22,7 +22,7 @@
                 <div class="col-md-4">
                     <div class="financial-summary">
                         <div class="summary-title">
-                            <i class="fas fa-dollar-sign"></i> Total Adeudado General
+                            Total Adeudado
                         </div>
                         <div class="summary-amount text-success">
                             ${{ "{:,.2f}".format(total_adeudado).replace(',', '.') }}
@@ -32,7 +32,7 @@
                 <div class="col-md-4">
                     <div class="financial-summary">
                         <div class="summary-title">
-                            <i class="fas fa-calendar-alt"></i> Adeudado {{ mes_actual }}
+                            {{ mes_actual }}
                         </div>
                         <div class="summary-amount text-warning">
                             ${{ "{:,.2f}".format(adeudado_mes_actual).replace(',', '.') }}
@@ -42,7 +42,7 @@
                 <div class="col-md-4">
                     <div class="financial-summary">
                         <div class="summary-title">
-                            <i class="fas fa-calendar-plus"></i> A Cobrar {{ mes_siguiente }}
+                            {{ mes_siguiente }}
                         </div>
                         <div class="summary-amount text-info">
                             ${{ "{:,.2f}".format(adeudado_mes_siguiente).replace(',', '.') }}
@@ -124,36 +124,93 @@
 
     /* Estilos para el resumen financiero */
     .financial-summary {
-        padding: 1.25rem;
+        padding: 2rem 1rem;
         text-align: center;
-        background-color: #f8f9fa;
-        border-radius: 8px;
+        background-color: #f3f4f6;
+        border-radius: 12px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         height: 100%;
         display: flex;
         flex-direction: column;
         justify-content: center;
+        align-items: center;
+        min-height: 160px;
+        overflow: hidden;
+        width: 100%;
     }
 
     .summary-title {
-        font-size: 0.9rem;
-        color: #007bff;
+        font-size: 1.3rem;
+        color: #6B7280;
         font-weight: 600;
-        margin-bottom: 0.75rem;
-        white-space: nowrap;
+        margin-bottom: 1rem;
+        white-space: normal;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        min-height: 2.5rem;
+    }
+
+    .summary-title i {
+        font-size: 1.4rem;
+        color: #6B7280;
     }
 
     .summary-amount {
-        font-size: 1.2rem;
+        font-size: 1.7rem;
         font-weight: bold;
-        line-height: 1;
+        line-height: 1.2;
         white-space: nowrap;
+        letter-spacing: -0.5px;
+        width: 100%;
+        padding: 0 0.5rem;
+        color: #6B7280;
+    }
+
+    .summary-amount.text-success,
+    .summary-amount.text-warning,
+    .summary-amount.text-info {
+        color: #6B7280 !important;
     }
 
     .financial-summary:hover {
         transform: translateY(-2px);
         transition: transform 0.3s ease;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background-color: #f8f9fa;
+    }
+
+    /* Media queries para asegurar responsividad */
+    @media (max-width: 1200px) {
+        .financial-summary {
+            padding: 1.5rem 0.75rem;
+        }
+
+        .summary-title {
+            font-size: 1rem;
+        }
+
+        .summary-amount {
+            font-size: 1.5rem;
+        }
+    }
+
+    @media (max-width: 992px) {
+        .financial-summary {
+            padding: 1.25rem 0.5rem;
+            min-height: 140px;
+        }
+
+        .summary-title {
+            font-size: 0.95rem;
+            min-height: 2rem;
+        }
+
+        .summary-amount {
+            font-size: 1.3rem;
+        }
     }
 
     /* Estilos para la tabla */

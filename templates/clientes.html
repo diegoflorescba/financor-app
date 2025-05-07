@@ -6,7 +6,7 @@
     <div class="card shadow-sm">
         <div class="card-header bg-purple-100 text-dark py-3">
             <div class="d-flex justify-content-between align-items-center">
-                <h2 class="mb-0 fs-3 fw-bold">
+                <h2 class="mb-0 fs-3 fw-bold text-gray-700">
                     <i class="fas fa-users me-2"></i>
                     Lista de Clientes
                 </h2>
@@ -211,6 +211,24 @@
         .table td {
             white-space: normal;
         }
+    }
+
+    /* Card and Header Styles */
+    .card {
+        border: none;
+    }
+
+    .card-header {
+        background-color: #f3f4f6 !important;
+        border-bottom: none;
+    }
+
+    .text-gray-700 {
+        color: #6B7280 !important;
+    }
+
+    .shadow-sm {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
     }
 </style>
 {% endblock %}

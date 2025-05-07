@@ -4,7 +4,7 @@
 <div class="container mt-5">
     <div class="card shadow">
         <div class="card-header bg-purple-100 text-dark py-3">
-            <h2 class="mb-0 text-center fs-3 fw-bold">
+            <h2 class="mb-0 text-center fs-3 fw-bold text-gray-700">
                 <i class="fas fa-user-plus me-2"></i>
                 Registro de Cliente
             </h2>
@@ -22,7 +22,7 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <!-- Datos Personales -->
                 <div class="mb-5">
-                    <h4 class="border-bottom pb-2 mb-4 text-success">Datos Personales</h4>
+                    <h4 class="border-bottom pb-2 mb-4 text-gray-700">Datos Personales</h4>
 
                     <div class="form-group">
                         <label for="nombre" class="form-label">Nombre *</label>
@@ -71,7 +71,7 @@
 
                 <!-- Datos del Préstamo -->
                 <div id="seccion_prestamo" style="display: none;">
-                    <h4 class="border-bottom pb-2 mb-4 text-purple">Datos del Préstamo</h4>
+                    <h4 class="border-bottom pb-2 mb-4 text-gray-700">Datos del Préstamo</h4>
 
                     <div class="form-group">
                         <label for="monto_prestado" class="form-label">Monto del Préstamo *</label>
@@ -124,7 +124,7 @@
 
                 <!-- Datos del Garante -->
                 <div id="seccion_garante" style="display: none;">
-                    <h4 class="border-bottom pb-2 mb-4 text-indigo">Datos del Garante</h4>
+                    <h4 class="border-bottom pb-2 mb-4 text-gray-700">Datos del Garante</h4>
 
                     <div class="form-check mb-4">
                         <input type="checkbox" class="form-check-input" id="tiene_garante" name="tiene_garante">
@@ -177,7 +177,7 @@
 
                 <!-- Botones -->
                 <div class="mt-5">
-                    <button type="submit" class="btn btn-success btn-lg" id="submitButton">
+                    <button type="submit" class="btn btn-gray btn-lg" id="submitButton">
                         <i class="fas fa-save me-2"></i>
                         <span class="px-3">Guardar</span>
                     </button>
@@ -194,7 +194,7 @@
     <!-- Vista Previa de Cuotas -->
     <div class="card shadow mt-4">
         <div class="card-header bg-purple-100 text-dark py-3">
-            <h2 class="mb-0 text-center fs-3 fw-bold">
+            <h2 class="mb-0 text-center fs-3 fw-bold text-gray-700">
                 <i class="fas fa-calendar-alt me-2"></i>
                 Vista Previa de Cuotas
             </h2>
@@ -222,11 +222,9 @@
 <style>
     /* Variables de colores */
     :root {
-        --color-success: #10B981;
-        --color-purple: #8B5CF6;
-        --color-indigo: #6366F1;
-        --color-danger: #EF4444;
         --color-gray: #6B7280;
+        --color-gray-light: #f3f4f6;
+        --color-danger: #DC2626;
     }
 
     /* Estilos para los campos del formulario */
@@ -239,8 +237,8 @@
     }
 
     .form-control-lg:focus {
-        border-color: var(--color-success);
-        box-shadow: 0 0 0 0.2rem rgba(16, 185, 129, 0.25);
+        border-color: var(--color-gray);
+        box-shadow: 0 0 0 0.2rem rgba(107, 114, 128, 0.25);
     }
 
     /* Contenedor para cada campo del formulario */
@@ -282,8 +280,8 @@
     }
 
     .form-check-input:checked {
-        background-color: var(--color-success);
-        border-color: var(--color-success);
+        background-color: var(--color-gray);
+        border-color: var(--color-gray);
     }
 
     /* Ajustes para la tabla */
@@ -298,8 +296,9 @@
     }
 
     .table thead th {
-        background-color: rgba(139, 92, 246, 0.1);
-        border-bottom: 2px solid rgba(139, 92, 246, 0.2);
+        background-color: var(--color-gray-light);
+        border-bottom: 2px solid #e5e7eb;
+        color: var(--color-gray);
     }
 
     /* Para campos de solo lectura */
@@ -309,35 +308,25 @@
     }
 
     /* Estilos para las secciones */
-    .text-success {
-        color: var(--color-success) !important;
+    .text-gray-700 {
+        color: var(--color-gray) !important;
     }
 
-    .text-purple {
-        color: var(--color-purple) !important;
-    }
-
-    .text-indigo {
-        color: var(--color-indigo) !important;
-    }
-
-    .bg-success {
-        background-color: var(--color-success) !important;
-    }
-
-    .bg-purple {
-        background-color: var(--color-purple) !important;
+    .bg-purple-100 {
+        background-color: var(--color-gray-light) !important;
     }
 
     /* Estilos para los botones */
-    .btn-success {
-        background-color: var(--color-success);
-        border-color: var(--color-success);
+    .btn-gray {
+        background-color: var(--color-gray);
+        border-color: var(--color-gray);
+        color: white;
     }
 
-    .btn-success:hover {
-        background-color: #0EA271;
-        border-color: #0EA271;
+    .btn-gray:hover {
+        background-color: #4B5563;
+        border-color: #4B5563;
+        color: white;
     }
 
     .btn-outline-danger {
@@ -349,15 +338,6 @@
         background-color: var(--color-danger);
         border-color: var(--color-danger);
         color: white;
-    }
-
-    /* Estilos para estados de cuotas */
-    .text-success {
-        color: var(--color-success) !important;
-    }
-
-    .text-danger {
-        color: var(--color-danger) !important;
     }
 
     /* Responsive adjustments */
@@ -379,6 +359,15 @@
 
         .form-check {
             margin-left: 0;
+        }
+
+        .d-flex.align-items-center.gap-2 {
+            flex-direction: column;
+            gap: 0.5rem !important;
+        }
+
+        .d-flex.align-items-center.gap-2 .btn {
+            width: 100%;
         }
     }
 </style>
