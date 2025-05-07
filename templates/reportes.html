@@ -1,7 +1,8 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="container h-100">
+<!-- Contenedor principal para el título y los resúmenes -->
+<div class="container mb-4">
     <div class="row justify-content-center g-3">
         <div class="col-12">
             <!-- Título principal -->
@@ -50,85 +51,78 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
-        <!-- Tabla de Préstamos -->
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-purple-100 text-dark py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h2 class="mb-0 fs-3 fw-bold">
-                            <i class="fas fa-file-invoice-dollar me-2"></i>
-                            Préstamos Activos - {{ mes_actual }}
-                        </h2>
-                        <div>
-                            <a href="{{ url_for('exportar_excel') }}" class="btn btn-outline-success btn-sm me-2">
-                                <i class="fas fa-file-excel me-2"></i>Exportar Excel
-                            </a>
-                            <a href="#" class="btn btn-outline-primary btn-sm" onclick="window.print()">
-                                <i class="fas fa-file-pdf me-2"></i>Imprimir PDF
-                            </a>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Cliente</th>
-                                    <th>Teléfono</th>
-                                    <th>Fecha Inicio</th>
-                                    <th class="text-end">Monto Prestado</th>
-                                    <th class="text-center">Cuotas</th>
-                                    <th class="text-end">Monto Cuota</th>
-                                    <th class="text-end">Adeudado</th>
-                                    <th class="text-center">Estado</th>
-                                    <th class="text-center">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for prestamo in prestamos %}
-                                <tr>
-                                    <td>{{ prestamo.cliente.apellido }}, {{ prestamo.cliente.nombre }}</td>
-                                    <td>{{ prestamo.cliente.telefono }}</td>
-                                    <td>{{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</td>
-                                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_prestado).replace(',', '.')
-                                        }}</td>
-                                    <td class="text-center">{{ prestamo.cuotas_totales - prestamo.cuotas_pendientes
-                                        }}/{{ prestamo.cuotas_totales }}</td>
-                                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_cuotas).replace(',', '.')
-                                        }}</td>
-                                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_adeudado).replace(',', '.')
-                                        }}</td>
-                                    <td class="text-center">
-                                        <span class="badge {{ prestamo.estado | lower }}-badge">
-                                            {{ prestamo.estado }}
-                                        </span>
-                                    </td>
-                                    <td class="text-center">
-                                        <a href="{{ url_for('ver_cliente', id=prestamo.cliente.id_cliente) }}"
-                                            class="btn btn-sm btn-outline-primary" title="Ver detalles">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+<!-- Contenedor separado para la tabla de préstamos -->
+<div class="table-section">
+    <div class="table-header bg-purple-100 text-dark py-3 px-4 mb-0">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0 fs-3 fw-bold">
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Préstamos Activos - {{ mes_actual }}
+            </h2>
+            <div>
+                <a href="{{ url_for('exportar_excel') }}" class="btn btn-outline-success btn-sm me-2">
+                    <i class="fas fa-file-excel me-2"></i>Exportar Excel
+                </a>
+                <a href="#" class="btn btn-outline-primary btn-sm" onclick="window.print()">
+                    <i class="fas fa-file-pdf me-2"></i>Imprimir PDF
+                </a>
             </div>
         </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Cliente</th>
+                    <th>Teléfono</th>
+                    <th>Fecha Inicio</th>
+                    <th class="text-end">Monto Prestado</th>
+                    <th class="text-center">Cuotas</th>
+                    <th class="text-end">Monto Cuota</th>
+                    <th class="text-end">Adeudado</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prestamo in prestamos %}
+                <tr>
+                    <td>{{ prestamo.cliente.apellido }}, {{ prestamo.cliente.nombre }}</td>
+                    <td>{{ prestamo.cliente.telefono }}</td>
+                    <td>{{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_prestado).replace(',', '.') }}</td>
+                    <td class="text-center">{{ prestamo.cuotas_totales - prestamo.cuotas_pendientes }}/{{
+                        prestamo.cuotas_totales }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_cuotas).replace(',', '.') }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_adeudado).replace(',', '.') }}</td>
+                    <td class="text-center">
+                        <span class="badge {{ prestamo.estado | lower }}-badge">
+                            {{ prestamo.estado }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <a href="{{ url_for('ver_cliente', id=prestamo.cliente.id_cliente) }}"
+                            class="btn btn-sm btn-outline-primary" title="Ver detalles">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 
 <style>
+    /* Estilos para los contenedores principales */
     .container {
         padding: 1.5rem;
-        min-height: calc(100vh - 60px);
-        /* Ajusta este valor según el alto de tu navbar */
     }
 
+    /* Estilos para el resumen financiero */
     .financial-summary {
         padding: 1.25rem;
         text-align: center;
@@ -139,7 +133,6 @@
         display: flex;
         flex-direction: column;
         justify-content: center;
-        width: 100%;
     }
 
     .summary-title {
@@ -164,13 +157,26 @@
     }
 
     /* Estilos para la tabla */
+    .table-section {
+        width: 100%;
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .table-header {
+        border-bottom: 1px solid #e5e7eb;
+    }
+
     .table-responsive {
         margin: 0;
         padding: 0;
+        border: none;
     }
 
     .table {
-        margin-bottom: 0;
+        margin: 0;
+        width: 100%;
+        table-layout: auto;
     }
 
     .table th {
@@ -178,8 +184,8 @@
         border-bottom: 2px solid #e5e7eb;
         font-weight: 600;
         color: #374151;
-        white-space: nowrap;
         padding: 1rem;
+        white-space: nowrap;
     }
 
     .table td {
@@ -201,45 +207,30 @@
     }
 
     .finalizado-badge {
-        background-color: #f3f4f6;
+        background-color: #e5e7eb;
         color: #374151;
         padding: 0.5rem 1rem;
         border-radius: 9999px;
         font-weight: 500;
     }
 
-    .atrasado-badge {
-        background-color: #fee2e2;
-        color: #991b1b;
-        padding: 0.5rem 1rem;
-        border-radius: 9999px;
-        font-weight: 500;
-    }
+    /* Asegurar que la tabla ocupe todo el ancho disponible */
+    @media screen and (min-width: 1024px) {
+        .table-section {
+            min-width: 100vw;
+            margin-left: calc(-50vw + 50%);
+            margin-right: calc(-50vw + 50%);
+        }
 
-    /* Colores para los montos */
-    .text-success {
-        color: #28a745 !important;
-    }
+        .table-responsive {
+            overflow-x: visible;
+        }
 
-    .text-warning {
-        color: #ffc107 !important;
-    }
-
-    .text-primary {
-        color: #007bff !important;
-    }
-
-    .text-info {
-        color: #17a2b8 !important;
-    }
-
-    /* Card styles */
-    .card {
-        margin-bottom: 0;
-    }
-
-    .card-body {
-        padding: 1rem;
+        .table {
+            width: 100%;
+            margin: 0 auto;
+            max-width: none;
+        }
     }
 </style>
 {% endblock %}
