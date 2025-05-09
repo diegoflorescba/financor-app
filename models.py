@@ -146,7 +146,13 @@ class Cuota(db.Model):
     fecha_vencimiento = db.Column(db.DateTime, nullable=False)
     fecha_pago = db.Column(db.DateTime, nullable=True)
     monto = db.Column(db.Float, nullable=False)
+    monto_original = db.Column(db.Float, nullable=False)  # Monto original de la cuota
+    monto_pendiente = db.Column(db.Float, nullable=False)  # Monto pendiente de pago
     monto_pagado = db.Column(db.Float, nullable=False, default=0.0)
+    interes_acumulado = db.Column(db.Float, nullable=False, default=0.0)  # Interés acumulado
+    fecha_ultimo_pago = db.Column(db.DateTime, nullable=True)  # Fecha del último pago
+    ajuste_manual = db.Column(db.Float, nullable=True)  # Ajuste manual del monto
+    nota_ajuste = db.Column(db.Text, nullable=True)  # Nota para el ajuste manual
     pagada = db.Column(db.Boolean, nullable=False, default=False)
     estado = db.Column(db.String(20), nullable=False, default='PENDIENTE')
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -158,3 +164,56 @@ class Cuota(db.Model):
 
     def __repr__(self):
         return f'<Cuota {self.numero_cuota} del Préstamo {self.id_prestamo}>'
+
+    def calcular_interes_diario(self):
+        """Calcula el interés diario (0.5% por día) desde la fecha de vencimiento"""
+        if self.pagada:
+            return 0.0
+        
+        fecha_actual = datetime.now()
+        if fecha_actual <= self.fecha_vencimiento:
+            return 0.0
+        
+        dias_atraso = (fecha_actual - self.fecha_vencimiento).days
+        interes = self.monto_pendiente * (0.005 * dias_atraso)
+        return interes
+
+    def monto_total_pendiente(self):
+        """Retorna el monto total pendiente incluyendo intereses"""
+        return self.monto_pendiente + self.interes_acumulado + self.calcular_interes_diario()
+
+    def registrar_pago_parcial(self, monto_pagado, es_ajuste_manual=False, nota_ajuste=None):
+        """Registra un pago parcial y actualiza los montos"""
+        if monto_pagado <= 0:
+            raise ValueError("El monto del pago debe ser mayor a 0")
+        
+        # Calcular interés hasta el momento del pago
+        interes_hasta_ahora = self.calcular_interes_diario()
+        self.interes_acumulado += interes_hasta_ahora
+        
+        # Actualizar montos
+        self.monto_pagado += monto_pagado
+        self.monto_pendiente -= monto_pagado
+        self.fecha_ultimo_pago = datetime.now()
+        
+        # Si es un ajuste manual, registrar la nota
+        if es_ajuste_manual:
+            self.ajuste_manual = monto_pagado
+            self.nota_ajuste = nota_ajuste
+        
+        # Verificar si la cuota está completamente pagada
+        if self.monto_pendiente <= 0:
+            self.pagada = True
+            self.estado = 'PAGADA'
+            self.fecha_pago = datetime.now()
+        
+        return True
+
+    def actualizar_estado(self):
+        """Actualiza el estado de la cuota basado en los montos"""
+        if self.pagada:
+            self.estado = 'PAGADA'
+        elif self.monto_pendiente < self.monto_original:
+            self.estado = 'PAGO_PARCIAL'
+        else:
+            self.estado = 'PENDIENTE'

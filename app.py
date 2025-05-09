@@ -1741,6 +1741,82 @@ def user_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+@app.route('/pago_parcial/<int:cuota_id>', methods=['POST'])
+@login_required
+@admin_required
+def pago_parcial(cuota_id):
+    try:
+        cuota = Cuota.query.get_or_404(cuota_id)
+        monto_pagado = float(request.form.get('monto_pagado', 0))
+        
+        if monto_pagado <= 0:
+            flash('El monto del pago debe ser mayor a 0', 'error')
+            return redirect(url_for('cuotas_a_vencer'))
+        
+        # Calcular interés hasta el momento del pago
+        interes_hasta_ahora = cuota.calcular_interes_diario()
+        monto_total_pendiente = cuota.monto_total_pendiente()
+        
+        # Registrar el pago
+        cuota.registrar_pago_parcial(monto_pagado)
+        
+        # Actualizar el préstamo
+        prestamo = cuota.prestamo
+        prestamo.monto_adeudado = sum(c.monto_total_pendiente() for c in prestamo.cuotas if not c.pagada)
+        
+        # Registrar en el log de auditoría
+        audit_change('update', 'cuota', cuota.id_cuota, changes={
+            'monto_pagado': monto_pagado,
+            'interes_calculado': interes_hasta_ahora,
+            'monto_total_pendiente': monto_total_pendiente,
+            'fecha_pago': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        
+        db.session.commit()
+        flash('Pago parcial registrado exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al registrar el pago: {str(e)}', 'error')
+    
+    return redirect(url_for('cuotas_a_vencer'))
+
+@app.route('/ajuste_manual/<int:cuota_id>', methods=['POST'])
+@login_required
+@admin_required
+def ajuste_manual(cuota_id):
+    try:
+        cuota = Cuota.query.get_or_404(cuota_id)
+        monto_ajuste = float(request.form.get('monto_ajuste', 0))
+        nota_ajuste = request.form.get('nota_ajuste', '')
+        
+        if monto_ajuste <= 0:
+            flash('El monto del ajuste debe ser mayor a 0', 'error')
+            return redirect(url_for('cuotas_a_vencer'))
+        
+        # Registrar el ajuste manual
+        cuota.registrar_pago_parcial(monto_ajuste, es_ajuste_manual=True, nota_ajuste=nota_ajuste)
+        
+        # Actualizar el préstamo
+        prestamo = cuota.prestamo
+        prestamo.monto_adeudado = sum(c.monto_total_pendiente() for c in prestamo.cuotas if not c.pagada)
+        
+        # Registrar en el log de auditoría
+        audit_change('update', 'cuota', cuota.id_cuota, changes={
+            'monto_ajuste': monto_ajuste,
+            'nota_ajuste': nota_ajuste,
+            'fecha_ajuste': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        
+        db.session.commit()
+        flash('Ajuste manual registrado exitosamente', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al registrar el ajuste: {str(e)}', 'error')
+    
+    return redirect(url_for('cuotas_a_vencer'))
+
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")
     app.run(debug=True)
