@@ -23,42 +23,31 @@ def run_migration():
     with app.app_context():
         try:
             # Add new columns one by one to handle SQLite limitations
-            for column in [
+            columns = [
                 "monto_original DECIMAL(10,2)",
                 "monto_pendiente DECIMAL(10,2)",
                 "interes_acumulado DECIMAL(10,2) DEFAULT 0.0",
                 "fecha_ultimo_pago DATETIME",
                 "ajuste_manual DECIMAL(10,2)",
                 "nota_ajuste TEXT"
-            ]:
+            ]
+            
+            for column in columns:
                 try:
-                    with db.engine.connect() as conn:
+                    with db.engine.begin() as conn:
                         conn.execute(text(f"ALTER TABLE cuota ADD COLUMN {column};"))
                     print(f"Added column: {column}")
                 except Exception as e:
-                    print(f"Column might already exist or error: {str(e)}")
-            
-            # Update existing records
-            with db.engine.connect() as conn:
-                conn.execute(text('''
-                    UPDATE cuota 
-                    SET monto_original = monto,
-                        monto_pendiente = CASE 
-                            WHEN pagada = 1 THEN 0 
-                            ELSE monto - COALESCE(monto_pagado, 0) 
-                        END,
-                        interes_acumulado = 0.0,
-                        fecha_ultimo_pago = CASE 
-                            WHEN pagada = 1 THEN fecha_pago 
-                            ELSE NULL 
-                        END;
-                '''))
-                conn.commit()
-            
+                    if "duplicate column name" in str(e).lower():
+                        print(f"Column already exists: {column}")
+                    else:
+                        raise e
+
             print("Migration completed successfully!")
+            
         except Exception as e:
             print(f"Error during migration: {str(e)}")
             raise e
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     run_migration() 
