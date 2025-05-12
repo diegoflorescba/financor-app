@@ -1484,6 +1484,16 @@ def generar_contrato(prestamo_id):
         flash(f'Error al generar el contrato: {str(e)}', 'error')
         return redirect(url_for('prestamos'))
 
+def obtener_primer_dia_habil(fecha):
+    # Obtener el primer día del mes
+    primer_dia = fecha.replace(day=1)
+    
+    # Si es sábado (5) o domingo (6), avanzar al lunes
+    while primer_dia.weekday() >= 5:  # 5 es sábado, 6 es domingo
+        primer_dia = primer_dia + timedelta(days=1)
+    
+    return primer_dia
+
 @app.route('/generar_pagare/<int:prestamo_id>')
 def generar_pagare(prestamo_id):
     try:
@@ -1518,6 +1528,9 @@ def generar_pagare(prestamo_id):
             # Cargar el template
             doc = Document('templates/template_pagare.docx')
             
+            # Calcular la fecha del primer día hábil del mes de vencimiento
+            fecha_firma = obtener_primer_dia_habil(cuota.fecha_vencimiento)
+            
             # Crear diccionario con los reemplazos necesarios
             replacements = {
                 '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
@@ -1525,9 +1538,9 @@ def generar_pagare(prestamo_id):
                 '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
                 '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado),
                 '{cuota_mensual_letras}': numero_a_letras(cuota.monto),
-                '{mes_firma_pagare}': prestamo.fecha_inicio.strftime('%B').capitalize(),
-                '{dia_firma_pagare}': str(prestamo.fecha_inicio.day),
-                '{ano_pagare}': str(prestamo.fecha_inicio.year),
+                '{mes_firma_pagare}': fecha_firma.strftime('%B').capitalize(),
+                '{dia_firma_pagare}': str(fecha_firma.day),
+                '{ano_pagare}': str(fecha_firma.year),
                 '{cuota_mensual_numeros}': f"${format_money(cuota.monto)}",
                 '{numero_pagare}': str(cuota.numero_cuota),
                 '{vencimiento_pagare}': cuota.fecha_vencimiento.strftime('%d/%m/%Y')
