@@ -17,7 +17,8 @@
 <div class="loans-section">
     <div class="accordion" id="accordionPrestamos">
         {% for cliente in clientes %}
-        <div class="accordion-item mb-3">
+        <div class="accordion-item mb-3"
+            style="width:100vw; margin-left:calc(-50vw + 50%); margin-right:calc(-50vw + 50%); background-color:white; box-shadow:0 2px 4px rgba(0,0,0,0.1);">
             <!-- Cabecera del Cliente -->
             <h2 class="accordion-header" id="heading{{ cliente.id_cliente }}">
                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
@@ -80,7 +81,18 @@
                                         <tr>
                                             <td>{{ cuota.numero_cuota }}</td>
                                             <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
-                                            <td>${{ "%.2f"|format(cuota.monto) }}</td>
+                                            <td>
+                                                {% if cuota.estado == 'PAGO_PARCIAL' %}
+                                                <span class="badge bg-info">Pago Parcial</span>
+                                                ${{ '%.2f' % cuota.monto_pagado }} / ${{ '%.2f' % cuota.monto }}
+                                                {% elif cuota.pagada %}
+                                                <span class="badge bg-success">Pagada</span>
+                                                ${{ '%.2f' % cuota.monto_pagado }}
+                                                {% else %}
+                                                <span class="badge bg-danger">Pendiente</span>
+                                                ${{ '%.2f' % cuota.monto }}
+                                                {% endif %}
+                                            </td>
                                             <td>
                                                 <span id="estado-cuota-{{ cuota.id_cuota }}"
                                                     class="badge {% if cuota.pagada %}bg-success{% else %}bg-danger{% endif %}">

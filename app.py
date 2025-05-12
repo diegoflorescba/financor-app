@@ -1761,32 +1761,46 @@ def pago_parcial(cuota_id):
     try:
         cuota = Cuota.query.get_or_404(cuota_id)
         monto_pagado = float(request.form.get('monto_pagado', 0))
+        marcar_pagada = request.form.get('marcar_pagada') == 'on'
+        nota_pago = request.form.get('nota_pago', '')
         
         if monto_pagado <= 0:
             flash('El monto del pago debe ser mayor a 0', 'error')
             return redirect(url_for('cuotas_a_vencer'))
         
-        # Calcular interés hasta el momento del pago
-        interes_hasta_ahora = cuota.calcular_interes_diario()
-        monto_total_pendiente = cuota.monto_total_pendiente()
-        
-        # Registrar el pago
-        cuota.registrar_pago_parcial(monto_pagado)
-        
-        # Actualizar el préstamo
-        prestamo = cuota.prestamo
-        prestamo.monto_adeudado = sum(c.monto_total_pendiente() for c in prestamo.cuotas if not c.pagada)
-        
-        # Registrar en el log de auditoría
-        audit_change('update', 'cuota', cuota.id_cuota, changes={
-            'monto_pagado': monto_pagado,
-            'interes_calculado': interes_hasta_ahora,
-            'monto_total_pendiente': monto_total_pendiente,
-            'fecha_pago': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        })
+        if marcar_pagada:
+            cuota.monto_pagado = monto_pagado
+            cuota.monto_pendiente = 0
+            cuota.pagada = True
+            cuota.estado = 'PAGADA'
+            cuota.fecha_pago = datetime.now()
+            cuota.nota_ajuste = nota_pago
+        else:
+            # Calcular interés hasta el momento del pago
+            interes_hasta_ahora = cuota.calcular_interes_diario()
+            monto_total_pendiente = cuota.monto_total_pendiente()
+            
+            # Registrar el pago parcial
+            cuota.registrar_pago_parcial(monto_pagado)
+            cuota.nota_ajuste = nota_pago
+            # Si hay monto pendiente y monto pagado, marcar como pago parcial
+            if cuota.monto_pendiente > 0 and cuota.monto_pagado > 0:
+                cuota.estado = 'PAGO_PARCIAL'
+            # Actualizar el préstamo
+            prestamo = cuota.prestamo
+            prestamo.monto_adeudado = sum(c.monto_total_pendiente() for c in prestamo.cuotas if not c.pagada)
+            
+            # Registrar en el log de auditoría
+            audit_change('update', 'cuota', cuota.id_cuota, changes={
+                'monto_pagado': monto_pagado,
+                'interes_calculado': interes_hasta_ahora,
+                'monto_total_pendiente': monto_total_pendiente,
+                'fecha_pago': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'nota_pago': nota_pago
+            })
         
         db.session.commit()
-        flash('Pago parcial registrado exitosamente', 'success')
+        flash('Pago registrado exitosamente', 'success')
         
     except Exception as e:
         db.session.rollback()

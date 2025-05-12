@@ -74,10 +74,21 @@
                     <td>{{ cuota.prestamo.cliente.telefono }}</td>
                     <td>{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}</td>
                     <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
-                    <td class="text-end">${{ "{:,.2f}".format(cuota.monto_original).replace(',', '.') }}</td>
-                    <td class="text-end">${{ "{:,.2f}".format(cuota.interes_acumulado +
-                        cuota.calcular_interes_diario()).replace(',', '.') }}</td>
-                    <td class="text-end">${{ "{:,.2f}".format(cuota.monto_total_pendiente()).replace(',', '.') }}</td>
+                    <td class="text-end">${{ "{:.2f}".format(cuota.monto_original).replace(',', '.') }}</td>
+                    <td class="text-end">$0.00</td>
+                    <td class="text-end">
+                        {% if cuota.estado == 'PAGO_PARCIAL' %}
+                        <span class="badge bg-info">Pago Parcial</span>
+                        ${{ '{:,.2f}'.format(cuota.monto_pagado).replace(',', '.') }} / ${{
+                        '{:,.2f}'.format(cuota.monto_original).replace(',', '.') }}
+                        {% elif cuota.pagada %}
+                        <span class="badge bg-success">Pagada</span>
+                        ${{ '{:,.2f}'.format(cuota.monto_pagado).replace(',', '.') }}
+                        {% else %}
+                        <span class="badge bg-danger">Pendiente</span>
+                        ${{ '{:,.2f}'.format(cuota.monto_original).replace(',', '.') }}
+                        {% endif %}
+                    </td>
                     <td class="text-center">
                         <span class="badge {{ cuota.estado | lower }}-badge">
                             {{ cuota.estado }}
@@ -86,25 +97,22 @@
                     <td class="text-center">
                         <div class="btn-group" role="group">
                             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
-                                data-bs-target="#pagoParcialModal{{ cuota.id_cuota }}">
+                                data-bs-target="#pagoParcialModal{{ cuota.id_cuota }}"
+                                data-monto-pendiente="{{ (cuota.monto_original - cuota.monto_pagado) if cuota.estado == 'PAGO_PARCIAL' else cuota.monto_original }}"
+                                data-interes-pendiente="{{ cuota.interes_acumulado + cuota.calcular_interes_diario() }}">
                                 <i class="fas fa-money-bill-wave me-1"></i>
                                 Pagar
-                            </button>
-                            <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal"
-                                data-bs-target="#ajusteManualModal{{ cuota.id_cuota }}">
-                                <i class="fas fa-edit me-1"></i>
-                                Ajustar
                             </button>
                         </div>
                     </td>
                 </tr>
 
-                <!-- Modal de Pago Parcial -->
+                <!-- Modal de Pago (único) -->
                 <div class="modal fade" id="pagoParcialModal{{ cuota.id_cuota }}" tabindex="-1" aria-hidden="true">
                     <div class="modal-dialog">
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h5 class="modal-title">Registrar Pago Parcial</h5>
+                                <h5 class="modal-title">Registrar Pago</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"
                                     aria-label="Close"></button>
                             </div>
@@ -125,86 +133,37 @@
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">Monto Original</label>
-                                        <input type="text" class="form-control" value="${{ "
-                                            {:,.2f}".format(cuota.monto_original).replace(',', '.' ) }}" readonly>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Interés Acumulado</label>
-                                        <input type="text" class="form-control" value="${{ "
-                                            {:,.2f}".format(cuota.interes_acumulado +
-                                            cuota.calcular_interes_diario()).replace(',', '.' ) }}" readonly>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Total a Pagar</label>
-                                        <input type="text" class="form-control" value="${{ "
-                                            {:,.2f}".format(cuota.monto_total_pendiente()).replace(',', '.' ) }}"
+                                        <input type="text" class="form-control" data-monto-original
+                                            value="${{ '{:,.2f}'.format(cuota.monto_original).replace(',', '.') }}"
                                             readonly>
                                     </div>
                                     <div class="mb-3">
-                                        <label for="monto_pagado" class="form-label">Monto a Pagar</label>
+                                        <label class="form-label">Interés Acumulado</label>
+                                        <input type="text" class="form-control" data-interes-acumulado
+                                            value="${{ '{:,.2f}'.format(cuota.interes_acumulado + cuota.calcular_interes_diario()).replace(',', '.') }}"
+                                            readonly>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="monto_pagado" class="form-label">Total a Cobrar</label>
                                         <input type="number" step="0.01" class="form-control" id="monto_pagado"
                                             name="monto_pagado" required>
+                                    </div>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" name="marcar_pagada"
+                                            id="marcar_pagada_{{ cuota.id_cuota }}">
+                                        <label class="form-check-label" for="marcar_pagada_{{ cuota.id_cuota }}">
+                                            Marcar como Cuota Pagada
+                                        </label>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="nota_pago" class="form-label">Nota (opcional)</label>
+                                        <textarea class="form-control" id="nota_pago" name="nota_pago"
+                                            rows="2"></textarea>
                                     </div>
                                     <div class="text-end">
                                         <button type="button" class="btn btn-secondary"
                                             data-bs-dismiss="modal">Cancelar</button>
                                         <button type="submit" class="btn btn-primary">Registrar Pago</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Modal de Ajuste Manual -->
-                <div class="modal fade" id="ajusteManualModal{{ cuota.id_cuota }}" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">Ajuste Manual</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                    aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <form action="{{ url_for('ajuste_manual', cuota_id=cuota.id_cuota) }}" method="POST">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="mb-3">
-                                        <label class="form-label">Cliente</label>
-                                        <input type="text" class="form-control"
-                                            value="{{ cuota.prestamo.cliente.apellido }}, {{ cuota.prestamo.cliente.nombre }}"
-                                            readonly>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Cuota</label>
-                                        <input type="text" class="form-control"
-                                            value="{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}"
-                                            readonly>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Monto Original</label>
-                                        <input type="text" class="form-control" value="${{ "
-                                            {:,.2f}".format(cuota.monto_original).replace(',', '.' ) }}" readonly>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Interés Acumulado</label>
-                                        <input type="text" class="form-control" value="${{ "
-                                            {:,.2f}".format(cuota.interes_acumulado +
-                                            cuota.calcular_interes_diario()).replace(',', '.' ) }}" readonly>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="monto_ajuste" class="form-label">Monto del Ajuste</label>
-                                        <input type="number" step="0.01" class="form-control" id="monto_ajuste"
-                                            name="monto_ajuste" required>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="nota_ajuste" class="form-label">Nota del Ajuste</label>
-                                        <textarea class="form-control" id="nota_ajuste" name="nota_ajuste" rows="3"
-                                            required></textarea>
-                                    </div>
-                                    <div class="text-end">
-                                        <button type="button" class="btn btn-secondary"
-                                            data-bs-dismiss="modal">Cancelar</button>
-                                        <button type="submit" class="btn btn-warning">Registrar Ajuste</button>
                                     </div>
                                 </form>
                             </div>
@@ -428,4 +387,24 @@
         }
     }
 </style>
+
+<script>
+    // Precargar el total a cobrar automáticamente al abrir el modal de pago
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[id^="pagoParcialModal"]').forEach(function (modal) {
+            modal.addEventListener('show.bs.modal', function (event) {
+                var totalInput = this.querySelector('input[name="monto_pagado"]');
+                // Leer los valores del botón que disparó el modal
+                var btn = event.relatedTarget;
+                if (btn) {
+                    var montoPendiente = parseFloat(btn.getAttribute('data-monto-pendiente')) || 0;
+                    var interesPendiente = parseFloat(btn.getAttribute('data-interes-pendiente')) || 0;
+                    if (totalInput) {
+                        totalInput.value = (montoPendiente + interesPendiente).toFixed(2);
+                    }
+                }
+            });
+        });
+    });
+</script>
 {% endblock %}
