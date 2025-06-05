@@ -217,6 +217,7 @@ def registro():
                         fecha_vencimiento=fecha_vencimiento,
                         monto=monto_cuota,
                         monto_pagado=monto_cuota if esta_pagada else 0.0,
+                        monto_pendiente=0.0 if esta_pagada else monto_cuota,
                         pagada=esta_pagada,
                         estado='PAGADA' if esta_pagada else 'PENDIENTE',
                         fecha_pago=datetime.now() if esta_pagada else None
@@ -291,69 +292,44 @@ def reportes():
         Prestamo.monto_adeudado > 0
     ).all()
     
-    # Modificar el cálculo del total adeudado para solo incluir cuotas pendientes
-    total_adeudado = db.session.query(
-        func.sum(Cuota.monto - Cuota.monto_pagado)
-    ).join(
-        Prestamo, Cuota.id_prestamo == Prestamo.id_prestamo
-    ).filter(
-        Cuota.estado == 'PENDIENTE',
-        Prestamo.estado == 'ACTIVO'
-    ).scalar() or 0
-    
-    # Calcular el adeudado del mes actual
-    adeudado_mes_actual = db.session.query(db.func.sum(Cuota.monto))\
-        .join(Prestamo)\
-        .filter(
-            Prestamo.estado == 'ACTIVO',
-            Cuota.pagada == False,
-            db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
-            db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
-        ).scalar() or 0.0
-    
-    # Calcular el adeudado del mes siguiente
-    adeudado_mes_siguiente = db.session.query(db.func.sum(Cuota.monto))\
-        .join(Prestamo)\
-        .filter(
-            Prestamo.estado == 'ACTIVO',
-            Cuota.pagada == False,
-            db.extract('month', Cuota.fecha_vencimiento) == fecha_siguiente.month,
-            db.extract('year', Cuota.fecha_vencimiento) == fecha_siguiente.year
-        ).scalar() or 0.0
+    # Calcular el total adeudado como suma de monto_adeudado de los préstamos activos
+    total_adeudado = sum(p.monto_adeudado for p in prestamos)
 
-    # Obtener cuotas para la tabla
+    # Obtener cuotas para la tabla (siempre incluir mes actual y siguiente)
     query = Cuota.query.join(Prestamo).join(Cliente).filter(
         Prestamo.estado == 'ACTIVO',
-        Cuota.pagada == False
-    )
-
-    # Si estamos después del día 10, incluir cuotas del mes siguiente
-    if fecha_actual.day > 10:
-        query = query.filter(
-            db.or_(
-                db.and_(
-                    db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
-                    db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
-                ),
-                db.and_(
-                    db.extract('month', Cuota.fecha_vencimiento) == fecha_siguiente.month,
-                    db.extract('year', Cuota.fecha_vencimiento) == fecha_siguiente.year
-                )
+        Cuota.pagada == False,
+        db.or_(
+            db.and_(
+                db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
+                db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
+            ),
+            db.and_(
+                db.extract('month', Cuota.fecha_vencimiento) == fecha_siguiente.month,
+                db.extract('year', Cuota.fecha_vencimiento) == fecha_siguiente.year
             )
         )
-    else:
-        query = query.filter(
-            db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
-            db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
-        )
+    )
 
     cuotas = query.order_by(Cliente.apellido, Cliente.nombre, Cuota.fecha_vencimiento).all()
+
+    # Calcular los totales a partir de las cuotas que se muestran en la tabla
+    adeudado_mes_actual = sum(
+        c.monto_pendiente for c in cuotas
+        if c.fecha_vencimiento.month == fecha_actual.month and c.fecha_vencimiento.year == fecha_actual.year
+    )
+    adeudado_mes_siguiente = sum(
+        c.monto_pendiente for c in cuotas
+        if c.fecha_vencimiento.month == fecha_siguiente.month and c.fecha_vencimiento.year == fecha_siguiente.year
+    )
     
     return render_template('reportes.html',
                          prestamos=prestamos,
                          cuotas=cuotas,
                          mes_actual=mes_actual,
                          mes_siguiente=mes_siguiente,
+                         fecha_actual=fecha_actual,
+                         fecha_siguiente=fecha_siguiente,
                          total_adeudado=total_adeudado,
                          adeudado_mes_actual=adeudado_mes_actual,
                          adeudado_mes_siguiente=adeudado_mes_siguiente,
@@ -677,6 +653,7 @@ def crear_prestamo():
                 fecha_vencimiento=fecha_vencimiento,
                 monto=nuevo_prestamo.monto_cuotas,
                 monto_pagado=nuevo_prestamo.monto_cuotas if esta_pagada else 0.0,
+                monto_pendiente=0.0 if esta_pagada else nuevo_prestamo.monto_cuotas,
                 pagada=esta_pagada,
                 estado='PAGADA' if esta_pagada else 'PENDIENTE',
                 fecha_pago=datetime.now() if esta_pagada else None

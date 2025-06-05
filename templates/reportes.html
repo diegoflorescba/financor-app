@@ -79,6 +79,7 @@
                     <th>Cliente</th>
                     <th>Teléfono</th>
                     <th>Fecha Inicio</th>
+                    <th>Fecha Vencimiento</th>
                     <th class="text-end">Monto Prestado</th>
                     <th class="text-center">Cuotas</th>
                     <th class="text-end">Monto Cuota</th>
@@ -88,28 +89,89 @@
                 </tr>
             </thead>
             <tbody>
-                {% for prestamo in prestamos %}
+                {% for cuota in cuotas %}
+                {% if cuota.fecha_vencimiento.month == fecha_actual.month and cuota.fecha_vencimiento.year ==
+                fecha_actual.year %}
                 <tr>
-                    <td>{{ prestamo.cliente.apellido }}, {{ prestamo.cliente.nombre }}</td>
-                    <td>{{ prestamo.cliente.telefono }}</td>
-                    <td>{{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</td>
-                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_prestado).replace(',', '.') }}</td>
-                    <td class="text-center">{{ prestamo.cuotas_totales - prestamo.cuotas_pendientes }}/{{
-                        prestamo.cuotas_totales }}</td>
-                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_cuotas).replace(',', '.') }}</td>
-                    <td class="text-end">${{ "{:,.2f}".format(prestamo.monto_adeudado).replace(',', '.') }}</td>
+                    <td>{{ cuota.prestamo.cliente.apellido }}, {{ cuota.prestamo.cliente.nombre }}</td>
+                    <td>{{ cuota.prestamo.cliente.telefono }}</td>
+                    <td>{{ cuota.prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_prestado).replace(',', '.') }}</td>
+                    <td class="text-center">{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(cuota.monto_pendiente).replace(',', '.') }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_adeudado).replace(',', '.') }}</td>
                     <td class="text-center">
-                        <span class="badge {{ prestamo.estado | lower }}-badge">
-                            {{ prestamo.estado }}
+                        <span class="badge {{ cuota.prestamo.estado | lower }}-badge">
+                            {{ cuota.prestamo.estado }}
                         </span>
                     </td>
                     <td class="text-center">
-                        <a href="{{ url_for('ver_cliente', id=prestamo.cliente.id_cliente) }}"
+                        <a href="{{ url_for('ver_cliente', id=cuota.prestamo.cliente.id_cliente) }}"
                             class="btn btn-sm btn-outline-primary" title="Ver detalles">
                             <i class="fas fa-eye"></i>
                         </a>
                     </td>
                 </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tabla para el mes siguiente -->
+<div class="table-section mt-5">
+    <div class="table-header bg-purple-100 text-dark py-3 px-4 mb-0">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0 fs-3 fw-bold">
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Préstamos Activos - {{ mes_siguiente }}
+            </h2>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Cliente</th>
+                    <th>Teléfono</th>
+                    <th>Fecha Inicio</th>
+                    <th>Fecha Vencimiento</th>
+                    <th class="text-end">Monto Prestado</th>
+                    <th class="text-center">Cuotas</th>
+                    <th class="text-end">Monto Cuota</th>
+                    <th class="text-end">Adeudado</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cuota in cuotas %}
+                {% if cuota.fecha_vencimiento.month == fecha_siguiente.month and cuota.fecha_vencimiento.year ==
+                fecha_siguiente.year %}
+                <tr>
+                    <td>{{ cuota.prestamo.cliente.apellido }}, {{ cuota.prestamo.cliente.nombre }}</td>
+                    <td>{{ cuota.prestamo.cliente.telefono }}</td>
+                    <td>{{ cuota.prestamo.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_prestado).replace(',', '.') }}</td>
+                    <td class="text-center">{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(cuota.monto_pendiente).replace(',', '.') }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_adeudado).replace(',', '.') }}</td>
+                    <td class="text-center">
+                        <span class="badge {{ cuota.prestamo.estado | lower }}-badge">
+                            {{ cuota.prestamo.estado }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <a href="{{ url_for('ver_cliente', id=cuota.prestamo.cliente.id_cliente) }}"
+                            class="btn btn-sm btn-outline-primary" title="Ver detalles">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endif %}
                 {% endfor %}
             </tbody>
         </table>
