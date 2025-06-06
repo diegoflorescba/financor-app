@@ -1821,33 +1821,6 @@ def ajuste_manual(cuota_id):
     
     return redirect(url_for('cuotas_a_vencer'))
 
-@app.route('/debug_cuotas_pagadas_erroneas')
-@login_required
-@admin_required
-def debug_cuotas_pagadas_erroneas():
-    cuotas = Cuota.query.filter(
-        Cuota.pagada == True,
-        Cuota.monto_pagado == 0,
-        Cuota.monto_original > 0
-    ).all()
-    return render_template('debug_cuotas_pagadas_erroneas.html', cuotas=cuotas)
-
-@app.route('/corregir_cuotas_pagadas_erroneas')
-@login_required
-@admin_required
-def corregir_cuotas_pagadas_erroneas():
-    cuotas = Cuota.query.filter(
-        Cuota.pagada == True,
-        Cuota.monto_pagado == 0,
-        Cuota.monto_original > 0
-    ).all()
-    corregidas = 0
-    for cuota in cuotas:
-        cuota.monto_pagado = cuota.monto_original
-        corregidas += 1
-    db.session.commit()
-    return f"Se corrigieron {corregidas} cuotas pagadas con monto_pagado = 0. <a href='/debug_cuotas_pagadas_erroneas'>Ver cuotas erróneas</a>"
-
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")
     app.run(debug=True)
