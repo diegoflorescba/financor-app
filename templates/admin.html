@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="admin-container p-4">
+<div class="table-section" style="margin-left: calc(-50vw + 50%); margin-right: calc(-50vw + 50%); min-width: 100vw;">
     <h1 class="mb-4">Panel de Administración - Base de Datos</h1>
 
     <!-- Clientes -->
@@ -11,7 +11,7 @@
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-striped">
+                <table class="table table-striped table-hover">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -48,7 +48,7 @@
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-striped">
+                <table class="table table-striped table-hover">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -111,7 +111,7 @@
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-striped">
+                <table class="table table-striped table-hover">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -153,7 +153,7 @@
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-striped">
+                <table class="table table-striped table-hover">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -186,13 +186,24 @@
 </div>
 
 <style>
-    .admin-container {
-        max-width: 95%;
-        margin: 0 auto;
+    .table-section {
+        width: 100vw;
+        min-width: 100vw;
+        margin-left: calc(-50vw + 50%);
+        margin-right: calc(-50vw + 50%);
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
     .table-responsive {
-        overflow-x: auto;
+        overflow-x: visible;
+        width: 100%;
+    }
+
+    .table {
+        width: 100%;
+        margin: 0 auto;
+        max-width: none;
     }
 
     .card-header {
