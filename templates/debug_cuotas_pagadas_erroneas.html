@@ -1,0 +1,60 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Cuotas pagadas con monto_pagado = 0 y monto_original &gt; 0</h2>
+    <table class="table table-bordered table-striped table-hover text-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>ID Cuota</th>
+                <th>ID Préstamo</th>
+                <th>N° Cuota</th>
+                <th>Cliente</th>
+                <th>Monto Original</th>
+                <th>Monto Pagado</th>
+                <th>Monto Pendiente</th>
+                <th>Interés Acumulado</th>
+                <th>Pagada</th>
+                <th>Estado</th>
+                <th>Fecha Vencimiento</th>
+                <th>Fecha Pago</th>
+                <th>Fecha Último Pago</th>
+                <th>Ajuste Manual</th>
+                <th>Nota Ajuste</th>
+                <th>Creado Por</th>
+                <th>Actualizado Por</th>
+                <th>Creado</th>
+                <th>Actualizado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cuota in cuotas %}
+            <tr>
+                <td>{{ cuota.id_cuota }}</td>
+                <td>{{ cuota.id_prestamo }}</td>
+                <td>{{ cuota.numero_cuota }}</td>
+                <td>{{ cuota.prestamo.cliente.apellido }}, {{ cuota.prestamo.cliente.nombre }}</td>
+                <td>${{ '%.2f'|format(cuota.monto_original) }}</td>
+                <td>${{ '%.2f'|format(cuota.monto_pagado) }}</td>
+                <td>${{ '%.2f'|format(cuota.monto_pendiente) }}</td>
+                <td>${{ '%.2f'|format(cuota.interes_acumulado) }}</td>
+                <td>{{ cuota.pagada }}</td>
+                <td>{{ cuota.estado }}</td>
+                <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') if cuota.fecha_vencimiento else '' }}</td>
+                <td>{{ cuota.fecha_pago.strftime('%d/%m/%Y') if cuota.fecha_pago else '' }}</td>
+                <td>{{ cuota.fecha_ultimo_pago.strftime('%d/%m/%Y') if cuota.fecha_ultimo_pago else '' }}</td>
+                <td>{{ cuota.ajuste_manual }}</td>
+                <td>{{ cuota.nota_ajuste }}</td>
+                <td>{{ cuota.created_by }}</td>
+                <td>{{ cuota.updated_by }}</td>
+                <td>{{ cuota.created_at.strftime('%d/%m/%Y') if cuota.created_at else '' }}</td>
+                <td>{{ cuota.updated_at.strftime('%d/%m/%Y') if cuota.updated_at else '' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if cuotas|length == 0 %}
+    <div class="alert alert-success mt-4">No se encontraron cuotas erróneas.</div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -484,7 +484,7 @@ def pagar_cuota(cuota_id):
 
             cuota.pagada = True
             cuota.fecha_pago = datetime.now()
-            cuota.monto_pagado = cuota.monto
+            cuota.monto_pagado = cuota.monto_original  # CORREGIDO: usar monto_original
             cuota.estado = 'PAGADA'
             cuota.updated_by = current_user.id
 
@@ -1820,6 +1820,17 @@ def ajuste_manual(cuota_id):
         flash(f'Error al registrar el ajuste: {str(e)}', 'error')
     
     return redirect(url_for('cuotas_a_vencer'))
+
+@app.route('/debug_cuotas_pagadas_erroneas')
+@login_required
+@admin_required
+def debug_cuotas_pagadas_erroneas():
+    cuotas = Cuota.query.filter(
+        Cuota.pagada == True,
+        Cuota.monto_pagado == 0,
+        Cuota.monto_original > 0
+    ).all()
+    return render_template('debug_cuotas_pagadas_erroneas.html', cuotas=cuotas)
 
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")
