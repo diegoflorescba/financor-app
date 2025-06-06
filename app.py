@@ -315,11 +315,11 @@ def reportes():
 
     # Calcular los totales a partir de las cuotas que se muestran en la tabla
     adeudado_mes_actual = sum(
-        c.monto_pendiente for c in cuotas
+        (c.monto_pendiente or 0) for c in cuotas
         if c.fecha_vencimiento.month == fecha_actual.month and c.fecha_vencimiento.year == fecha_actual.year
     )
     adeudado_mes_siguiente = sum(
-        c.monto_pendiente for c in cuotas
+        (c.monto_pendiente or 0) for c in cuotas
         if c.fecha_vencimiento.month == fecha_siguiente.month and c.fecha_vencimiento.year == fecha_siguiente.year
     )
     
