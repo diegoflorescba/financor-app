@@ -1062,6 +1062,7 @@ def guardar_prestamo():
                 fecha_vencimiento=fecha_vencimiento,
                 estado='PAGADA' if esta_pagada else 'PENDIENTE',
                 monto_pagado=monto_cuotas if esta_pagada else 0,
+                monto_pendiente=0.0 if esta_pagada else monto_cuotas,
                 pagada=esta_pagada,
                 fecha_pago=datetime.now() if esta_pagada else None
             )
