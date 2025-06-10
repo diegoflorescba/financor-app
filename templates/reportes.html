@@ -99,7 +99,7 @@
                     <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
                     <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_prestado).replace(',', '.') }}</td>
                     <td class="text-center">{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}</td>
-                    <td class="text-end">${{ "{:,.2f}".format(cuota.monto_pendiente).replace(',', '.') }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(cuota.monto_pendiente or 0).replace(',', '.') }}</td>
                     <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_adeudado).replace(',', '.') }}</td>
                     <td class="text-center">
                         <span class="badge {{ cuota.prestamo.estado | lower }}-badge">
@@ -157,7 +157,7 @@
                     <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
                     <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_prestado).replace(',', '.') }}</td>
                     <td class="text-center">{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}</td>
-                    <td class="text-end">${{ "{:,.2f}".format(cuota.monto_pendiente).replace(',', '.') }}</td>
+                    <td class="text-end">${{ "{:,.2f}".format(cuota.monto_pendiente or 0).replace(',', '.') }}</td>
                     <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_adeudado).replace(',', '.') }}</td>
                     <td class="text-center">
                         <span class="badge {{ cuota.prestamo.estado | lower }}-badge">
