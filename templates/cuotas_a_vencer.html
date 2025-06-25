@@ -15,19 +15,19 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
-        <!-- Panel de resumen financiero -->
+<!-- Panel de resumen financiero con clase específica -->
+<div class="financial-summary-section mb-4">
+    <div class="row g-4">
         <div class="col-12">
-            <div class="row g-3">
-                <div class="col-md-12">
-                    <div class="financial-summary">
-                        <div class="summary-title">
-                            Total a Cobrar
-                        </div>
-                        <div class="summary-amount text-success">
-                            ${{ "{:,.2f}".format(total_a_cobrar).replace(',', '.') }}
-                        </div>
-                    </div>
+            <div class="financial-summary">
+                <div class="summary-title">
+                    Total a Cobrar
+                </div>
+                <div class="summary-amount text-success">
+                    ${{ "{:,.2f}".format(total_a_cobrar).replace(',', '.') }}
                 </div>
             </div>
         </div>
@@ -74,32 +74,43 @@
                     <td>{{ cuota.prestamo.cliente.telefono }}</td>
                     <td>{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}</td>
                     <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
-                    <td class="text-end">${{ "{:.2f}".format(cuota.monto_original).replace(',', '.') }}</td>
+                    <td class="text-end">${{ "{:.2f}".format(cuota.monto).replace(',', '.') }}</td>
                     <td class="text-end">$0.00</td>
                     <td class="text-end">
-                        {% if cuota.estado == 'PAGO_PARCIAL' %}
+                        {% set interes_calculado = cuota.calcular_interes_diario() %}
+                        {% if cuota.estado.value == 'PAGO_PARCIAL' %}
                         <span class="badge bg-info">Pago Parcial</span>
                         ${{ '{:,.2f}'.format(cuota.monto_pagado).replace(',', '.') }} / ${{
-                        '{:,.2f}'.format(cuota.monto_original).replace(',', '.') }}
-                        {% elif cuota.pagada %}
+                        '{:,.2f}'.format(cuota.monto).replace(',', '.') }}
+                        {% if interes_calculado > 0 %}
+                        <br><small>Pendiente: ${{ '{:,.2f}'.format(cuota.monto_pendiente +
+                            interes_calculado).replace(',', '.') }} (incluye interés)</small>
+                        {% else %}
+                        <br><small>Pendiente: ${{ '{:,.2f}'.format(cuota.monto_pendiente).replace(',', '.') }}</small>
+                        {% endif %}
+                        {% elif cuota.estado.value == 'PAGADA' %}
                         <span class="badge bg-success">Pagada</span>
                         ${{ '{:,.2f}'.format(cuota.monto_pagado).replace(',', '.') }}
                         {% else %}
                         <span class="badge bg-danger">Pendiente</span>
-                        ${{ '{:,.2f}'.format(cuota.monto_original).replace(',', '.') }}
+                        {% if interes_calculado > 0 %}
+                        ${{ '{:,.2f}'.format(cuota.monto + interes_calculado).replace(',', '.') }} (incluye interés)
+                        {% else %}
+                        ${{ '{:,.2f}'.format(cuota.monto).replace(',', '.') }}
+                        {% endif %}
                         {% endif %}
                     </td>
                     <td class="text-center">
-                        <span class="badge {{ cuota.estado | lower }}-badge">
-                            {{ cuota.estado }}
+                        <span class="badge {{ cuota.estado.value | lower }}-badge">
+                            {{ cuota.estado.value }}
                         </span>
                     </td>
                     <td class="text-center">
                         <div class="btn-group" role="group">
                             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
                                 data-bs-target="#pagoParcialModal{{ cuota.id_cuota }}"
-                                data-monto-pendiente="{{ (cuota.monto_original - cuota.monto_pagado) if cuota.estado == 'PAGO_PARCIAL' else cuota.monto_original }}"
-                                data-interes-pendiente="{{ cuota.interes_acumulado + cuota.calcular_interes_diario() }}">
+                                data-monto-pendiente="{{ cuota.monto_pendiente + cuota.calcular_interes_diario() }}"
+                                data-interes-pendiente="{{ cuota.calcular_interes_diario() }}">
                                 <i class="fas fa-money-bill-wave me-1"></i>
                                 Pagar
                             </button>
@@ -109,6 +120,7 @@
 
                 <!-- Modal de Pago (único) -->
                 <div class="modal fade" id="pagoParcialModal{{ cuota.id_cuota }}" tabindex="-1" aria-hidden="true">
+                    {% set interes_calculado = cuota.calcular_interes_diario() %}
                     <div class="modal-dialog">
                         <div class="modal-content">
                             <div class="modal-header">
@@ -134,15 +146,16 @@
                                     <div class="mb-3">
                                         <label class="form-label">Monto Original</label>
                                         <input type="text" class="form-control" data-monto-original
-                                            value="${{ '{:,.2f}'.format(cuota.monto_original).replace(',', '.') }}"
-                                            readonly>
+                                            value="${{ '{:,.2f}'.format(cuota.monto).replace(',', '.') }}" readonly>
                                     </div>
+                                    {% if interes_calculado > 0 %}
                                     <div class="mb-3">
                                         <label class="form-label">Interés Acumulado</label>
-                                        <input type="text" class="form-control" data-interes-acumulado
-                                            value="${{ '{:,.2f}'.format(cuota.interes_acumulado + cuota.calcular_interes_diario()).replace(',', '.') }}"
-                                            readonly>
+                                        <input type="number" step="0.01" class="form-control" data-interes-acumulado
+                                            name="interes_acumulado" value="{{ '{:.2f}'.format(interes_calculado) }}"
+                                            placeholder="Interés calculado automáticamente">
                                     </div>
+                                    {% endif %}
                                     <div class="mb-3">
                                         <label for="monto_pagado" class="form-label">Total a Cobrar</label>
                                         <input type="number" step="0.01" class="form-control" id="monto_pagado"
@@ -384,6 +397,89 @@
             width: 100%;
             margin: 0 auto;
             max-width: none;
+        }
+    }
+
+    /* Contenedor específico para la sección de resumen financiero */
+    .financial-summary-section {
+        width: 95%;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 0 1rem;
+    }
+
+    /* Estilos para el resumen financiero */
+    .financial-summary {
+        padding: 2rem 1.5rem;
+        text-align: center;
+        background-color: #f3f4f6;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 160px;
+    }
+
+    .summary-title {
+        font-size: 1.3rem;
+        color: #6B7280;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        white-space: normal;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        min-height: 2.5rem;
+    }
+
+    .summary-amount {
+        font-size: 1.6rem;
+        font-weight: bold;
+        line-height: 1.2;
+        white-space: nowrap;
+        letter-spacing: -0.5px;
+        padding: 0.5rem;
+        color: #6B7280;
+    }
+
+    .summary-amount.text-success,
+    .summary-amount.text-warning,
+    .summary-amount.text-info,
+    .summary-amount.text-danger {
+        color: #6B7280 !important;
+    }
+
+    .financial-summary:hover {
+        transform: translateY(-2px);
+        transition: transform 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background-color: #f8f9fa;
+    }
+
+    /* Media queries para asegurar responsividad */
+    @media (max-width: 1200px) {
+        .financial-summary {
+            padding: 1.5rem 1rem;
+        }
+
+        .summary-amount {
+            font-size: 1.4rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .financial-summary-section {
+            width: 100%;
+            padding: 0 0.5rem;
+        }
+
+        .summary-amount {
+            font-size: 1.3rem;
         }
     }
 </style>

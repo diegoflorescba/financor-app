@@ -146,6 +146,63 @@
         </div>
     </div>
 
+    <!-- Pagos -->
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white">
+            <h2 class="h5 mb-0">Pagos</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Cliente</th>
+                            <th>Cuota</th>
+                            <th>Monto Pagado</th>
+                            <th>Interés Pagado</th>
+                            <th>Tipo</th>
+                            <th>Fecha Pago</th>
+                            <th>Usuario</th>
+                            <th>Nota</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pago in pagos %}
+                        <tr>
+                            <td>{{ pago.id_pago }}</td>
+                            <td>{{ pago.cuota.prestamo.cliente.apellido }}, {{ pago.cuota.prestamo.cliente.nombre }}
+                            </td>
+                            <td>{{ pago.cuota.numero_cuota }}/{{ pago.cuota.prestamo.cuotas_totales }}</td>
+                            <td>${{ "{:,.2f}".format(pago.monto_pagado) }}</td>
+                            <td>${{ "{:,.2f}".format(pago.interes_pagado) if pago.interes_pagado else '-' }}</td>
+                            <td>
+                                <span
+                                    class="badge {% if pago.tipo_pago == 'total' %}bg-success{% elif pago.tipo_pago == 'parcial' %}bg-info{% else %}bg-warning{% endif %}">
+                                    {{ pago.tipo_pago.upper() }}
+                                </span>
+                            </td>
+                            <td>{{ pago.fecha_pago.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td>{{ pago.created_by_user.username if pago.created_by_user else '-' }}</td>
+                            <td>{{ pago.nota if pago.nota else '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-dark">
+                        <tr>
+                            <td colspan="3"><strong>TOTALES</strong></td>
+                            <td><strong>${{ "{:,.2f}".format(pagos|sum(attribute='monto_pagado')) }}</strong></td>
+                            <td><strong>${{ "{:,.2f}".format(pagos|selectattr('interes_pagado',
+                                    'defined')|selectattr('interes_pagado', 'ne', None)|sum(attribute='interes_pagado')
+                                    or 0) }}</strong></td>
+                            <td colspan="4"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- Garantes -->
     <div class="card mb-4">
         <div class="card-header bg-warning">

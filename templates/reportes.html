@@ -3,9 +3,9 @@
 {% block content %}
 <!-- Contenedor principal para el título y los resúmenes -->
 <div class="container mb-4">
+    <!-- Título principal -->
     <div class="row justify-content-center g-3">
         <div class="col-12">
-            <!-- Título principal -->
             <div class="card shadow-sm">
                 <div class="card-header bg-purple-100 text-dark py-3">
                     <h2 class="mb-0 text-center fs-3 fw-bold">
@@ -15,39 +15,49 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
-        <!-- Panel de resumen financiero -->
-        <div class="col-12">
-            <div class="row g-3">
-                <div class="col-md-4">
-                    <div class="financial-summary">
-                        <div class="summary-title">
-                            Total Adeudado
-                        </div>
-                        <div class="summary-amount text-success">
-                            ${{ "{:,.2f}".format(total_adeudado).replace(',', '.') }}
-                        </div>
-                    </div>
+<!-- Panel de resumen financiero con clase específica -->
+<div class="financial-summary-section mb-4">
+    <div class="row g-4">
+        <div class="col-xl-3 col-lg-6">
+            <div class="financial-summary">
+                <div class="summary-title">
+                    Total Adeudado
                 </div>
-                <div class="col-md-4">
-                    <div class="financial-summary">
-                        <div class="summary-title">
-                            {{ mes_actual }}
-                        </div>
-                        <div class="summary-amount text-warning">
-                            ${{ "{:,.2f}".format(adeudado_mes_actual).replace(',', '.') }}
-                        </div>
-                    </div>
+                <div class="summary-amount">
+                    <span>${{ "{:,.0f}".format(total_adeudado).replace(',', '.') }}</span>
                 </div>
-                <div class="col-md-4">
-                    <div class="financial-summary">
-                        <div class="summary-title">
-                            {{ mes_siguiente }}
-                        </div>
-                        <div class="summary-amount text-info">
-                            ${{ "{:,.2f}".format(adeudado_mes_siguiente).replace(',', '.') }}
-                        </div>
-                    </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-lg-6">
+            <div class="financial-summary">
+                <div class="summary-title">
+                    {{ mes_actual }}
+                </div>
+                <div class="summary-amount">
+                    <span>${{ "{:,.0f}".format(adeudado_mes_actual).replace(',', '.') }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-lg-6">
+            <div class="financial-summary">
+                <div class="summary-title">
+                    {{ mes_siguiente }}
+                </div>
+                <div class="summary-amount">
+                    <span>${{ "{:,.0f}".format(adeudado_mes_siguiente).replace(',', '.') }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-lg-6">
+            <div class="financial-summary">
+                <div class="summary-title">
+                    Proceso Judicial
+                </div>
+                <div class="summary-amount">
+                    <span>${{ "{:,.0f}".format(total_proceso_judicial).replace(',', '.') }}</span>
                 </div>
             </div>
         </div>
@@ -81,7 +91,7 @@
                     <th>Fecha Inicio</th>
                     <th>Fecha Vencimiento</th>
                     <th class="text-end">Monto Prestado</th>
-                    <th class="text-center">Cuotas</th>
+                    <th class="text-center">Cuota</th>
                     <th class="text-end">Monto Cuota</th>
                     <th class="text-end">Adeudado</th>
                     <th class="text-center">Estado</th>
@@ -102,8 +112,8 @@
                     <td class="text-end">${{ "{:,.2f}".format(cuota.monto_pendiente or 0).replace(',', '.') }}</td>
                     <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_adeudado).replace(',', '.') }}</td>
                     <td class="text-center">
-                        <span class="badge {{ cuota.prestamo.estado | lower }}-badge">
-                            {{ cuota.prestamo.estado }}
+                        <span class="badge {{ cuota.prestamo.estado.name | lower }}-badge">
+                            {{ cuota.prestamo.estado.name }}
                         </span>
                     </td>
                     <td class="text-center">
@@ -139,7 +149,7 @@
                     <th>Fecha Inicio</th>
                     <th>Fecha Vencimiento</th>
                     <th class="text-end">Monto Prestado</th>
-                    <th class="text-center">Cuotas</th>
+                    <th class="text-center">Cuota</th>
                     <th class="text-end">Monto Cuota</th>
                     <th class="text-end">Adeudado</th>
                     <th class="text-center">Estado</th>
@@ -160,8 +170,8 @@
                     <td class="text-end">${{ "{:,.2f}".format(cuota.monto_pendiente or 0).replace(',', '.') }}</td>
                     <td class="text-end">${{ "{:,.2f}".format(cuota.prestamo.monto_adeudado).replace(',', '.') }}</td>
                     <td class="text-center">
-                        <span class="badge {{ cuota.prestamo.estado | lower }}-badge">
-                            {{ cuota.prestamo.estado }}
+                        <span class="badge {{ cuota.prestamo.estado.name | lower }}-badge">
+                            {{ cuota.prestamo.estado.name }}
                         </span>
                     </td>
                     <td class="text-center">
@@ -179,99 +189,91 @@
 </div>
 
 <style>
-    /* Estilos para los contenedores principales */
-    .container {
-        padding: 1.5rem;
+    /* Contenedor específico para la sección de resumen financiero */
+    .financial-summary-section {
+        width: 100%;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 0 1rem;
     }
 
     /* Estilos para el resumen financiero */
     .financial-summary {
-        padding: 2rem 1rem;
-        text-align: center;
-        background-color: #f3f4f6;
-        border-radius: 12px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        padding: 1.5rem 1rem;
+        background-color: #f8fafc;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
         height: 100%;
         display: flex;
         flex-direction: column;
-        justify-content: center;
+        justify-content: space-between;
         align-items: center;
-        min-height: 160px;
-        overflow: hidden;
-        width: 100%;
+        min-height: 140px;
     }
 
     .summary-title {
-        font-size: 1.3rem;
-        color: #6B7280;
+        font-size: 1.25rem;
+        color: #64748b;
         font-weight: 600;
-        margin-bottom: 1rem;
-        white-space: normal;
+        line-height: 1.2;
+        text-align: center;
         width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        min-height: 2.5rem;
-    }
-
-    .summary-title i {
-        font-size: 1.4rem;
-        color: #6B7280;
+        margin-bottom: auto;
     }
 
     .summary-amount {
-        font-size: 1.7rem;
-        font-weight: bold;
+        font-size: 1.5rem;
+        font-weight: 700;
         line-height: 1.2;
-        white-space: nowrap;
-        letter-spacing: -0.5px;
+        color: #1e293b;
+        text-align: center;
         width: 100%;
-        padding: 0 0.5rem;
-        color: #6B7280;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding-bottom: 0.5rem;
     }
 
-    .summary-amount.text-success,
-    .summary-amount.text-warning,
-    .summary-amount.text-info {
-        color: #6B7280 !important;
+    .summary-amount span {
+        display: inline-block;
+        text-align: center;
     }
 
     .financial-summary:hover {
-        transform: translateY(-2px);
-        transition: transform 0.3s ease;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        background-color: #f8f9fa;
+        background-color: #f1f5f9;
+        transition: background-color 0.2s ease;
     }
 
     /* Media queries para asegurar responsividad */
     @media (max-width: 1200px) {
-        .financial-summary {
-            padding: 1.5rem 0.75rem;
-        }
-
-        .summary-title {
-            font-size: 1rem;
-        }
-
         .summary-amount {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
         }
     }
 
     @media (max-width: 992px) {
+        .summary-amount {
+            font-size: 1.3rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .financial-summary-section {
+            padding: 0 0.5rem;
+        }
+
         .financial-summary {
-            padding: 1.25rem 0.5rem;
-            min-height: 140px;
+            padding: 1rem;
+            min-height: 120px;
         }
 
         .summary-title {
-            font-size: 0.95rem;
-            min-height: 2rem;
+            font-size: 1.1rem;
         }
 
         .summary-amount {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
+            padding-bottom: 0.25rem;
         }
     }
 
@@ -328,6 +330,14 @@
     .finalizado-badge {
         background-color: #e5e7eb;
         color: #374151;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+    }
+
+    .judicial-badge {
+        background-color: #fee2e2;
+        color: #991b1b;
         padding: 0.5rem 1rem;
         border-radius: 9999px;
         font-weight: 500;

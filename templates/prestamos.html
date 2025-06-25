@@ -56,6 +56,11 @@
                                     <i class="fas fa-file-signature"></i> Generar Pagaré
                                 </a>
                                 {% if current_user.is_admin %}
+                                <button onclick="marcarProcesoJudicial({{ prestamo.id_prestamo }})"
+                                    class="btn {% if prestamo.estado.name == 'JUDICIAL' %}btn-warning{% else %}btn-secondary{% endif %} btn-sm ms-2">
+                                    <i class="fas fa-gavel"></i> {% if prestamo.estado.name == 'JUDICIAL' %}Desmarcar
+                                    Judicial{% else %}Marcar Judicial{% endif %}
+                                </button>
                                 <button onclick="confirmarEliminarPrestamo({{ prestamo.id_prestamo }})"
                                     class="btn btn-danger btn-sm ms-2">
                                     <i class="fas fa-trash"></i> Eliminar Préstamo
@@ -82,12 +87,15 @@
                                             <td>{{ cuota.numero_cuota }}</td>
                                             <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
                                             <td>
-                                                {% if cuota.estado == 'PAGO_PARCIAL' %}
+                                                {% if cuota.estado.name == 'PAGO_PARCIAL' %}
                                                 <span class="badge bg-info">Pago Parcial</span>
                                                 ${{ '%.2f' % cuota.monto_pagado }} / ${{ '%.2f' % cuota.monto }}
-                                                {% elif cuota.pagada %}
+                                                {% elif cuota.estado.name == 'PAGADA' %}
                                                 <span class="badge bg-success">Pagada</span>
-                                                ${{ '%.2f' % cuota.monto_pagado }}
+                                                ${{ '%.2f' % cuota.monto }}
+                                                {% elif cuota.estado.name == 'JUDICIAL' %}
+                                                <span class="badge bg-warning">Judicial</span>
+                                                ${{ '%.2f' % cuota.monto }}
                                                 {% else %}
                                                 <span class="badge bg-danger">Pendiente</span>
                                                 ${{ '%.2f' % cuota.monto }}
@@ -95,24 +103,24 @@
                                             </td>
                                             <td>
                                                 <span id="estado-cuota-{{ cuota.id_cuota }}"
-                                                    class="badge {% if cuota.pagada %}bg-success{% else %}bg-danger{% endif %}">
-                                                    {{ 'Pagada' if cuota.pagada else 'Pendiente' }}
+                                                    class="badge {% if cuota.estado.name == 'PAGADA' %}bg-success{% else %}bg-danger{% endif %}">
+                                                    {{ cuota.estado.name }}
                                                 </span>
                                             </td>
                                             <td>
                                                 <div class="form-check">
                                                     {% if current_user.is_admin %}
                                                     <input class="form-check-input" type="checkbox"
-                                                        id="cuota-{{ cuota.id_cuota }}" {% if cuota.pagada %}checked{%
-                                                        endif %}
+                                                        id="cuota-{{ cuota.id_cuota }}" {% if cuota.estado=='PAGADA'
+                                                        %}checked{% endif %}
                                                         onchange="actualizarEstadoCuota({{ cuota.id_cuota }}, this.checked)">
                                                     <label class="form-check-label" for="cuota-{{ cuota.id_cuota }}">
                                                         Marcar como pagada
                                                     </label>
                                                     {% else %}
                                                     <span
-                                                        class="badge {% if cuota.pagada %}bg-success{% else %}bg-danger{% endif %}">
-                                                        {{ 'Pagada' if cuota.pagada else 'Pendiente' }}
+                                                        class="badge {% if cuota.estado.name == 'PAGADA' %}bg-success{% else %}bg-danger{% endif %}">
+                                                        {{ cuota.estado.name }}
                                                     </span>
                                                     {% endif %}
                                                 </div>
@@ -250,43 +258,64 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token() }}'
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
             },
             body: JSON.stringify({
                 id_cuota: idCuota,
                 pagada: pagada
             })
         })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                return response.json();
-            })
+            .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Actualizar el estado visual
-                    const spanEstado = document.getElementById(`estado-cuota-${idCuota}`);
-                    if (pagada) {
-                        spanEstado.classList.remove('bg-danger');
-                        spanEstado.classList.add('bg-success');
-                        spanEstado.textContent = 'Pagada';
-                    } else {
-                        spanEstado.classList.remove('bg-success');
-                        spanEstado.classList.add('bg-danger');
-                        spanEstado.textContent = 'Pendiente';
-                    }
+                    const estadoElement = document.getElementById(`estado-cuota-${idCuota}`);
+                    estadoElement.textContent = pagada ? 'Pagada' : 'Pendiente';
+                    estadoElement.className = `badge ${pagada ? 'bg-success' : 'bg-danger'}`;
                 } else {
-                    // Si hay error, revertir el checkbox
-                    document.getElementById(`cuota-${idCuota}`).checked = !pagada;
-                    alert(data.error || 'Error al actualizar el estado de la cuota');
+                    alert('Error al actualizar el estado de la cuota');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                // Si hay error, revertir el checkbox
-                document.getElementById(`cuota-${idCuota}`).checked = !pagada;
                 alert('Error al actualizar el estado de la cuota');
+            });
+    }
+
+    function marcarProcesoJudicial(idPrestamo) {
+        console.log('Marcando proceso judicial:', { idPrestamo });
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+        console.log('CSRF Token:', csrfToken ? 'Present' : 'Missing');
+
+        fetch('/marcar_proceso_judicial', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                id_prestamo: idPrestamo
+            })
+        })
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json().catch(error => {
+                    console.error('Error parsing JSON:', error);
+                    throw new Error('Invalid JSON response');
+                });
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                if (data.success) {
+                    // Recargar la página para mostrar los cambios
+                    location.reload();
+                } else {
+                    alert('Error al actualizar el estado judicial del préstamo: ' + (data.error || 'Error desconocido'));
+                }
+            })
+            .catch(error => {
+                console.error('Error in marcarProcesoJudicial:', error);
+                alert('Error al actualizar el estado judicial del préstamo: ' + error.message);
             });
     }
 

@@ -2,6 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_login import UserMixin
 from sqlalchemy.dialects.postgresql import JSON
+from enum import Enum
 
 # Crear la instancia de SQLAlchemy
 db = SQLAlchemy()
@@ -83,7 +84,6 @@ class Cliente(db.Model):
     updated_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
-    prestamos = db.relationship('Prestamo', back_populates='cliente')
 
     def __repr__(self):
         return f'<Cliente {self.nombre} {self.apellido}>'
@@ -101,16 +101,26 @@ class Garante(db.Model):
     direccion = db.Column(db.String(200))
     documentacion_verificada = db.Column(db.Boolean, default=False)
     activo = db.Column(db.Boolean, default=True)
-    prestamos = db.relationship('Prestamo', back_populates='garante')
 
     def __repr__(self):
         return f'<Garante {self.nombre} {self.apellido}>'
 
 
+class EstadoPrestamo(Enum):
+    ACTIVO = "ACTIVO"
+    JUDICIAL = "JUDICIAL"
+    FINALIZADO = "FINALIZADO"
+
+class EstadoCuota(Enum):
+    PENDIENTE = "PENDIENTE"
+    PAGO_PARCIAL = "PAGO_PARCIAL"
+    JUDICIAL = "JUDICIAL"
+    PAGADA = "PAGADA"
+
 class Prestamo(db.Model):
     __tablename__ = 'prestamo'
 
-    id_prestamo = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id_prestamo = db.Column(db.Integer, primary_key=True)
     id_cliente = db.Column(db.Integer, db.ForeignKey('cliente.id_cliente'), nullable=False)
     id_garante = db.Column(db.Integer, db.ForeignKey('garante.id_garante'), nullable=True)
     monto_prestado = db.Column(db.Float, nullable=False)
@@ -121,53 +131,67 @@ class Prestamo(db.Model):
     monto_adeudado = db.Column(db.Float, nullable=False)
     fecha_inicio = db.Column(db.DateTime, nullable=False)
     fecha_finalizacion = db.Column(db.DateTime, nullable=True)
-    estado = db.Column(db.String(20), nullable=False, default='ACTIVO')
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    updated_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
-    fecha_ultima_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    estado = db.Column(db.Enum(EstadoPrestamo), nullable=False, default=EstadoPrestamo.ACTIVO)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    updated_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
 
     # Relaciones
-    cliente = db.relationship('Cliente', back_populates='prestamos')
-    garante = db.relationship('Garante', back_populates='prestamos')
-    cuotas = db.relationship('Cuota', back_populates='prestamo', cascade='all, delete-orphan')
+    cliente = db.relationship('Cliente', backref=db.backref('prestamos', lazy=True))
+    garante = db.relationship('Garante', backref=db.backref('prestamos', lazy=True))
+    cuotas = db.relationship('Cuota', backref='prestamo', lazy=True, cascade='all, delete-orphan')
+
+    def marcar_judicial(self):
+        """Marca el préstamo y sus cuotas pendientes como judiciales"""
+        self.estado = EstadoPrestamo.JUDICIAL
+        for cuota in self.cuotas:
+            if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]:
+                cuota.estado = EstadoCuota.JUDICIAL
+        db.session.commit()
+
+    def verificar_estado(self):
+        """Verifica y actualiza el estado del préstamo basado en sus cuotas"""
+        if self.estado == EstadoPrestamo.JUDICIAL:
+            return  # Si está en judicial, no cambia
+
+        todas_pagadas = all(cuota.estado == EstadoCuota.PAGADA for cuota in self.cuotas)
+        if todas_pagadas:
+            self.estado = EstadoPrestamo.FINALIZADO
+            self.fecha_finalizacion = datetime.now()
+            db.session.commit()
+
+    def actualizar_cuotas_pendientes(self):
+        self.cuotas_pendientes = sum(1 for cuota in self.cuotas if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL])
+        db.session.commit()
 
     def __repr__(self):
         return f'<Prestamo {self.id_prestamo} - Cliente {self.id_cliente}>'
 
-
 class Cuota(db.Model):
     __tablename__ = 'cuota'
 
-    id_cuota = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    id_prestamo = db.Column(db.Integer, db.ForeignKey('prestamo.id_prestamo', ondelete='CASCADE'), nullable=False)
+    id_cuota = db.Column(db.Integer, primary_key=True)
+    id_prestamo = db.Column(db.Integer, db.ForeignKey('prestamo.id_prestamo'), nullable=False)
     numero_cuota = db.Column(db.Integer, nullable=False)
     fecha_vencimiento = db.Column(db.DateTime, nullable=False)
-    fecha_pago = db.Column(db.DateTime, nullable=True)
     monto = db.Column(db.Float, nullable=False)
-    monto_original = db.Column(db.Float, nullable=False)  # Monto original de la cuota
-    monto_pendiente = db.Column(db.Float, nullable=False)  # Monto pendiente de pago
-    monto_pagado = db.Column(db.Float, nullable=False, default=0.0)
-    interes_acumulado = db.Column(db.Float, nullable=False, default=0.0)  # Interés acumulado
-    fecha_ultimo_pago = db.Column(db.DateTime, nullable=True)  # Fecha del último pago
-    ajuste_manual = db.Column(db.Float, nullable=True)  # Ajuste manual del monto
-    nota_ajuste = db.Column(db.Text, nullable=True)  # Nota para el ajuste manual
-    pagada = db.Column(db.Boolean, nullable=False, default=False)
-    estado = db.Column(db.String(20), nullable=False, default='PENDIENTE')
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    updated_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
-
-    prestamo = db.relationship('Prestamo', back_populates='cuotas')
+    monto_pagado = db.Column(db.Float, default=0.0)
+    monto_pendiente = db.Column(db.Float, nullable=True)
+    estado = db.Column(db.Enum(EstadoCuota), nullable=False, default=EstadoCuota.PENDIENTE)
+    fecha_pago = db.Column(db.DateTime, nullable=True)
+    nota_ajuste = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    updated_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
 
     def __repr__(self):
         return f'<Cuota {self.numero_cuota} del Préstamo {self.id_prestamo}>'
 
     def calcular_interes_diario(self):
         """Calcula el interés diario (0.5% por día) desde la fecha de vencimiento"""
-        if self.pagada:
+        if self.estado == EstadoCuota.PAGADA:
             return 0.0
         
         fecha_actual = datetime.now()
@@ -175,45 +199,118 @@ class Cuota(db.Model):
             return 0.0
         
         dias_atraso = (fecha_actual - self.fecha_vencimiento).days
-        interes = self.monto_pendiente * (0.005 * dias_atraso)
-        return interes
+        return self.monto_pendiente * 0.005 * dias_atraso  # 0.5% por día
 
     def monto_total_pendiente(self):
         """Retorna el monto total pendiente incluyendo intereses"""
-        return self.monto_pendiente + self.interes_acumulado + self.calcular_interes_diario()
+        return self.monto_pendiente + self.calcular_interes_diario()
 
     def registrar_pago_parcial(self, monto_pagado, es_ajuste_manual=False, nota_ajuste=None):
-        """Registra un pago parcial y actualiza los montos"""
-        if monto_pagado <= 0:
-            raise ValueError("El monto del pago debe ser mayor a 0")
+        """Registra un pago parcial en la cuota"""
+        if self.estado == EstadoCuota.JUDICIAL:
+            raise ValueError("No se pueden registrar pagos en cuotas en estado judicial")
         
-        # Calcular interés hasta el momento del pago
-        interes_hasta_ahora = self.calcular_interes_diario()
-        self.interes_acumulado += interes_hasta_ahora
-        
-        # Actualizar montos
         self.monto_pagado += monto_pagado
-        self.monto_pendiente -= monto_pagado
-        self.fecha_ultimo_pago = datetime.now()
+        self.monto_pendiente = max(0, self.monto - self.monto_pagado)
         
-        # Si es un ajuste manual, registrar la nota
-        if es_ajuste_manual:
-            self.ajuste_manual = monto_pagado
-            self.nota_ajuste = nota_ajuste
-        
-        # Verificar si la cuota está completamente pagada
+        # Actualizar estado
         if self.monto_pendiente <= 0:
-            self.pagada = True
-            self.estado = 'PAGADA'
+            self.estado = EstadoCuota.PAGADA
             self.fecha_pago = datetime.now()
         
-        return True
+        # Actualizar estado basado en montos
+        self.actualizar_estado()
+        
+        if nota_ajuste:
+            self.nota_ajuste = nota_ajuste
+        
+        # Actualizar cuotas pendientes del préstamo
+        self.prestamo.actualizar_cuotas_pendientes()
 
     def actualizar_estado(self):
         """Actualiza el estado de la cuota basado en los montos"""
-        if self.pagada:
-            self.estado = 'PAGADA'
-        elif self.monto_pendiente < self.monto_original:
-            self.estado = 'PAGO_PARCIAL'
+        if self.estado == EstadoCuota.PAGADA:
+            self.estado = EstadoCuota.PAGADA
+        elif self.monto_pendiente < self.monto:
+            self.estado = EstadoCuota.PAGO_PARCIAL
         else:
-            self.estado = 'PENDIENTE'
+            self.estado = EstadoCuota.PENDIENTE
+
+    def registrar_pago(self, monto_pagado):
+        """Registra un pago en la cuota y actualiza su estado"""
+        if self.estado == EstadoCuota.JUDICIAL:
+            raise ValueError("No se pueden registrar pagos en cuotas en estado judicial")
+
+        self.monto_pagado = monto_pagado
+        self.monto_pendiente = self.monto - monto_pagado
+        
+        if monto_pagado >= self.monto:
+            self.estado = EstadoCuota.PAGADA
+            self.monto_pagado = self.monto
+            self.monto_pendiente = 0
+            self.fecha_pago = datetime.now()
+        elif monto_pagado > 0:
+            self.estado = EstadoCuota.PAGO_PARCIAL
+            self.fecha_pago = datetime.now()
+        
+        # Verificar estado del préstamo
+        self.prestamo.verificar_estado()
+        # Actualizar cuotas pendientes del préstamo
+        self.prestamo.actualizar_cuotas_pendientes()
+        db.session.commit()
+
+    def registrar_pago_con_trazabilidad(self, monto_pagado, interes_pagado=None, tipo_pago='parcial', nota=None, usuario_id=None):
+        """Registra un pago con trazabilidad completa en la tabla de pagos"""
+        if self.estado == EstadoCuota.JUDICIAL:
+            raise ValueError("No se pueden registrar pagos en cuotas en estado judicial")
+        
+        # Asegurar que interes_pagado tenga un valor válido
+        interes_pagado = float(interes_pagado if interes_pagado is not None else 0.0)
+        
+        # Crear registro en la tabla de pagos
+        pago = Pago(
+            id_cuota=self.id_cuota,
+            monto_pagado=monto_pagado,
+            interes_pagado=interes_pagado,
+            tipo_pago=tipo_pago,
+            nota=nota,
+            created_by=usuario_id
+        )
+        db.session.add(pago)
+        
+        # Actualizar la cuota
+        self.monto_pagado += monto_pagado
+        self.monto_pendiente = max(0, self.monto - self.monto_pagado)
+        
+        # Actualizar estado
+        if self.monto_pendiente <= 0:
+            self.estado = EstadoCuota.PAGADA
+            self.fecha_pago = datetime.now()
+        elif self.monto_pagado > 0:
+            self.estado = EstadoCuota.PAGO_PARCIAL
+            self.fecha_pago = datetime.now()
+        
+        # Actualizar cuotas pendientes del préstamo
+        self.prestamo.actualizar_cuotas_pendientes()
+        
+        return pago
+
+class Pago(db.Model):
+    __tablename__ = 'pago'
+    
+    id_pago = db.Column(db.Integer, primary_key=True)
+    id_cuota = db.Column(db.Integer, db.ForeignKey('cuota.id_cuota'), nullable=False)
+    fecha_pago = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    monto_pagado = db.Column(db.Float, nullable=False)
+    interes_pagado = db.Column(db.Float, nullable=True)
+    tipo_pago = db.Column(db.String(20), nullable=False, default='parcial')  # 'parcial', 'total', 'ajuste'
+    nota = db.Column(db.String(255), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    
+    # Relaciones
+    cuota = db.relationship('Cuota', backref=db.backref('pagos', lazy=True))
+    created_by_user = db.relationship('User', backref=db.backref('pagos_registrados', lazy=True))
+    
+    def __repr__(self):
+        return f'<Pago {self.id_pago} - Cuota {self.id_cuota} - ${self.monto_pagado}>'

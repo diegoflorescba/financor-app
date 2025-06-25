@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from datetime import datetime, date, timedelta
 from calendar import monthrange
 from dateutil.relativedelta import relativedelta
-from models import db, Cliente, Prestamo, Cuota, Garante, User, AuditLog
+from models import db, Cliente, Prestamo, Cuota, Garante, User, AuditLog, EstadoPrestamo, EstadoCuota, Pago
 import os
 import pandas as pd
 import io
@@ -187,7 +187,7 @@ def registro():
                     monto_adeudado=monto_total,
                     fecha_inicio=fecha_inicio,
                     fecha_finalizacion=fecha_primera_cuota + relativedelta(months=cuotas_totales-1),
-                    estado='ACTIVO'
+                    estado=EstadoPrestamo.ACTIVO
                 )
 
                 db.session.add(nuevo_prestamo)
@@ -219,7 +219,7 @@ def registro():
                         monto_pagado=monto_cuota if esta_pagada else 0.0,
                         monto_pendiente=0.0 if esta_pagada else monto_cuota,
                         pagada=esta_pagada,
-                        estado='PAGADA' if esta_pagada else 'PENDIENTE',
+                        estado=EstadoCuota.PAGADA if esta_pagada else EstadoCuota.PENDIENTE,
                         fecha_pago=datetime.now() if esta_pagada else None
                     )
                     
@@ -235,7 +235,7 @@ def registro():
 
                 # Si todas las cuotas están pagadas, marcar el préstamo como finalizado
                 if cuotas_pagadas == cuotas_totales:
-                    nuevo_prestamo.estado = 'FINALIZADO'
+                    nuevo_prestamo.estado = EstadoPrestamo.FINALIZADO
                     nuevo_prestamo.fecha_finalizacion = datetime.now()
 
                 # Procesar garante si está incluido
@@ -288,7 +288,7 @@ def reportes():
     
     # Obtener todos los préstamos activos
     prestamos = Prestamo.query.filter(
-        Prestamo.estado == 'ACTIVO',
+        Prestamo.estado == EstadoPrestamo.ACTIVO,
         Prestamo.monto_adeudado > 0
     ).all()
     
@@ -297,8 +297,8 @@ def reportes():
 
     # Obtener cuotas para la tabla (siempre incluir mes actual y siguiente)
     query = Cuota.query.join(Prestamo).join(Cliente).filter(
-        Prestamo.estado == 'ACTIVO',
-        Cuota.pagada == False,
+        Prestamo.estado == EstadoPrestamo.ACTIVO,
+        Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]),
         db.or_(
             db.and_(
                 db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
@@ -322,6 +322,13 @@ def reportes():
         (c.monto_pendiente or 0) for c in cuotas
         if c.fecha_vencimiento.month == fecha_siguiente.month and c.fecha_vencimiento.year == fecha_siguiente.year
     )
+
+    # Calcular total de proceso judicial
+    prestamos_judiciales = Prestamo.query.filter(
+        Prestamo.estado == EstadoPrestamo.JUDICIAL
+    ).all()
+    
+    total_proceso_judicial = sum(p.monto_adeudado for p in prestamos_judiciales)
     
     return render_template('reportes.html',
                          prestamos=prestamos,
@@ -333,6 +340,7 @@ def reportes():
                          total_adeudado=total_adeudado,
                          adeudado_mes_actual=adeudado_mes_actual,
                          adeudado_mes_siguiente=adeudado_mes_siguiente,
+                         total_proceso_judicial=total_proceso_judicial,
                          active_page='reportes')
 
 
@@ -355,7 +363,7 @@ def cuotas_a_vencer():
             datetime(today.year, today.month, 1),
             datetime(today.year, today.month, 10)
         ),
-        Cuota.pagada == False
+        Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL])
     ).order_by(Cuota.fecha_vencimiento).all()
 
     # Calcular el total a cobrar
@@ -419,8 +427,8 @@ def exportar_excel():
         cuotas = Cuota.query.join(Prestamo).join(Cliente).filter(
             Cuota.fecha_vencimiento >= primer_dia_mes,
             Cuota.fecha_vencimiento <= ultimo_dia_mes,
-            Cuota.pagada == False,
-            Prestamo.estado == 'ACTIVO'
+            Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]),
+            Prestamo.estado == EstadoPrestamo.ACTIVO
         ).order_by(Cliente.apellido, Cliente.nombre, Cuota.fecha_vencimiento).all()
 
         # Crear DataFrame
@@ -476,29 +484,30 @@ def money_format(value):
 @admin_required
 def pagar_cuota(cuota_id):
     try:
-        with db.session.begin_nested():
-            cuota = Cuota.query.get_or_404(cuota_id)
-            if cuota.pagada:
-                flash('Esta cuota ya está pagada', 'warning')
-                return redirect(url_for('cuotas_a_vencer'))
+        cuota = Cuota.query.get_or_404(cuota_id)
+        if cuota.estado == EstadoCuota.PAGADA:
+            flash('Esta cuota ya está pagada', 'warning')
+            return redirect(url_for('cuotas_a_vencer'))
 
-            cuota.pagada = True
-            cuota.fecha_pago = datetime.now()
-            cuota.monto_pagado = cuota.monto_original  # CORREGIDO: usar monto_original
-            cuota.estado = 'PAGADA'
-            cuota.updated_by = current_user.id
+        # Registrar el pago total con trazabilidad
+        pago = cuota.registrar_pago_con_trazabilidad(
+            monto_pagado=cuota.monto,
+            interes_pagado=None,  # Pago total sin interés adicional
+            tipo_pago='total',
+            nota='Pago total de cuota',
+            usuario_id=current_user.id
+        )
+        
+        # Actualizar el préstamo
+        prestamo = cuota.prestamo
+        prestamo.monto_adeudado = sum(c.monto_pendiente for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
+        
+        if prestamo.cuotas_pendientes == 0:
+            prestamo.estado = EstadoPrestamo.FINALIZADO
+            prestamo.fecha_finalizacion = datetime.now()
 
-            prestamo = cuota.prestamo
-            prestamo.cuotas_pendientes -= 1
-            prestamo.monto_adeudado -= cuota.monto
-            prestamo.updated_by = current_user.id
-
-            if prestamo.cuotas_pendientes == 0:
-                prestamo.estado = 'FINALIZADO'
-                prestamo.fecha_finalizacion = datetime.now()
-
-            db.session.commit()
-            flash('Cuota pagada exitosamente', 'success')
+        db.session.commit()
+        flash('Cuota pagada exitosamente', 'success')
 
     except Exception as e:
         db.session.rollback()
@@ -615,7 +624,7 @@ def crear_prestamo():
             monto_adeudado=monto_total,
             fecha_inicio=fecha_inicio,
             fecha_finalizacion=primer_vencimiento + relativedelta(months=cuotas_totales-1),
-            estado='ACTIVO'
+            estado=EstadoPrestamo.ACTIVO
         )
 
         db.session.add(nuevo_prestamo)
@@ -655,7 +664,7 @@ def crear_prestamo():
                 monto_pagado=nuevo_prestamo.monto_cuotas if esta_pagada else 0.0,
                 monto_pendiente=0.0 if esta_pagada else nuevo_prestamo.monto_cuotas,
                 pagada=esta_pagada,
-                estado='PAGADA' if esta_pagada else 'PENDIENTE',
+                estado=EstadoCuota.PAGADA if esta_pagada else EstadoCuota.PENDIENTE,
                 fecha_pago=datetime.now() if esta_pagada else None
             )
             
@@ -671,7 +680,7 @@ def crear_prestamo():
 
         # Si todas las cuotas están pagadas, marcar el préstamo como finalizado
         if cuotas_pagadas == nuevo_prestamo.cuotas_totales:
-            nuevo_prestamo.estado = 'FINALIZADO'
+            nuevo_prestamo.estado = EstadoPrestamo.FINALIZADO
             nuevo_prestamo.fecha_finalizacion = datetime.now()
 
         db.session.commit()
@@ -1035,7 +1044,7 @@ def guardar_prestamo():
             monto_adeudado=monto_adeudado,
             fecha_inicio=fecha_inicio,
             fecha_finalizacion=None,
-            estado='ACTIVO'
+            estado=EstadoPrestamo.ACTIVO
         )
         
         db.session.add(nuevo_prestamo)
@@ -1060,7 +1069,7 @@ def guardar_prestamo():
                 numero_cuota=i + 1,
                 monto=monto_cuotas,
                 fecha_vencimiento=fecha_vencimiento,
-                estado='PAGADA' if esta_pagada else 'PENDIENTE',
+                estado=EstadoCuota.PAGADA if esta_pagada else EstadoCuota.PENDIENTE,
                 monto_pagado=monto_cuotas if esta_pagada else 0,
                 monto_pendiente=0.0 if esta_pagada else monto_cuotas,
                 pagada=esta_pagada,
@@ -1272,8 +1281,7 @@ def actualizar_estado_cuota():
         cuota = db.session.get(Cuota, id_cuota)
         
         if cuota:
-            cuota.pagada = pagada
-            cuota.estado = 'PAGADA' if pagada else 'PENDIENTE'
+            cuota.estado = EstadoCuota.PAGADA if pagada else EstadoCuota.PENDIENTE
             db.session.commit()
             return jsonify({'success': True})
         return jsonify({'success': False, 'error': 'Cuota no encontrada'})
@@ -1312,6 +1320,7 @@ def admin():
     cuotas = Cuota.query.all()
     garantes = Garante.query.all()
     users = User.query.all()
+    pagos = Pago.query.all()
 
     return render_template('admin.html', 
                          clientes=clientes,
@@ -1319,6 +1328,7 @@ def admin():
                          cuotas=cuotas,
                          garantes=garantes,
                          users=users,
+                         pagos=pagos,
                          active_page='admin')
 
 @app.route('/test_bcra/<cuit>')
@@ -1370,9 +1380,9 @@ def actualizar_fechas_prestamo(id_prestamo):
             cuota.fecha_vencimiento = nueva_fecha
             
             # Establecer todas las cuotas como PENDIENTES
-            cuota.estado = 'PENDIENTE'
-            cuota.pagada = False
+            cuota.estado = EstadoCuota.PENDIENTE
             cuota.monto_pagado = 0
+            cuota.monto_pendiente = cuota.monto
             cuota.fecha_pago = None
         
         # Actualizar la fecha de finalización del préstamo
@@ -1739,6 +1749,20 @@ def pago_parcial(cuota_id):
     try:
         cuota = Cuota.query.get_or_404(cuota_id)
         monto_pagado = float(request.form.get('monto_pagado', 0))
+        
+        # Validar interés de forma más robusta
+        interes_pagado = None
+        interes_str = request.form.get('interes_acumulado', '').strip()
+        if interes_str and interes_str != '0':
+            try:
+                interes_pagado = float(interes_str)
+                if interes_pagado < 0:
+                    flash('El interés no puede ser negativo', 'error')
+                    return redirect(url_for('cuotas_a_vencer'))
+            except ValueError:
+                flash('El interés debe ser un número válido', 'error')
+                return redirect(url_for('cuotas_a_vencer'))
+        
         marcar_pagada = request.form.get('marcar_pagada') == 'on'
         nota_pago = request.form.get('nota_pago', '')
         
@@ -1747,35 +1771,29 @@ def pago_parcial(cuota_id):
             return redirect(url_for('cuotas_a_vencer'))
         
         if marcar_pagada:
-            cuota.monto_pagado = monto_pagado
-            cuota.monto_pendiente = 0
-            cuota.pagada = True
-            cuota.estado = 'PAGADA'
-            cuota.fecha_pago = datetime.now()
-            cuota.nota_ajuste = nota_pago
+            # Pago total de la cuota
+            tipo_pago = 'total'
+            pago = cuota.registrar_pago_con_trazabilidad(
+                monto_pagado=monto_pagado,
+                interes_pagado=interes_pagado,
+                tipo_pago=tipo_pago,
+                nota=nota_pago,
+                usuario_id=current_user.id
+            )
         else:
-            # Calcular interés hasta el momento del pago
-            interes_hasta_ahora = cuota.calcular_interes_diario()
-            monto_total_pendiente = cuota.monto_total_pendiente()
-            
-            # Registrar el pago parcial
-            cuota.registrar_pago_parcial(monto_pagado)
-            cuota.nota_ajuste = nota_pago
-            # Si hay monto pendiente y monto pagado, marcar como pago parcial
-            if cuota.monto_pendiente > 0 and cuota.monto_pagado > 0:
-                cuota.estado = 'PAGO_PARCIAL'
-            # Actualizar el préstamo
-            prestamo = cuota.prestamo
-            prestamo.monto_adeudado = sum(c.monto_total_pendiente() for c in prestamo.cuotas if not c.pagada)
-            
-            # Registrar en el log de auditoría
-            audit_change('update', 'cuota', cuota.id_cuota, changes={
-                'monto_pagado': monto_pagado,
-                'interes_calculado': interes_hasta_ahora,
-                'monto_total_pendiente': monto_total_pendiente,
-                'fecha_pago': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'nota_pago': nota_pago
-            })
+            # Pago parcial
+            tipo_pago = 'parcial'
+            pago = cuota.registrar_pago_con_trazabilidad(
+                monto_pagado=monto_pagado,
+                interes_pagado=interes_pagado,
+                tipo_pago=tipo_pago,
+                nota=nota_pago,
+                usuario_id=current_user.id
+            )
+        
+        # Actualizar el préstamo
+        prestamo = cuota.prestamo
+        prestamo.monto_adeudado = sum(c.monto_pendiente for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
         
         db.session.commit()
         flash('Pago registrado exitosamente', 'success')
@@ -1799,19 +1817,18 @@ def ajuste_manual(cuota_id):
             flash('El monto del ajuste debe ser mayor a 0', 'error')
             return redirect(url_for('cuotas_a_vencer'))
         
-        # Registrar el ajuste manual
-        cuota.registrar_pago_parcial(monto_ajuste, es_ajuste_manual=True, nota_ajuste=nota_ajuste)
+        # Registrar el ajuste manual con trazabilidad
+        pago = cuota.registrar_pago_con_trazabilidad(
+            monto_pagado=monto_ajuste,
+            interes_pagado=None,  # Ajuste manual sin interés
+            tipo_pago='ajuste',
+            nota=nota_ajuste,
+            usuario_id=current_user.id
+        )
         
         # Actualizar el préstamo
         prestamo = cuota.prestamo
-        prestamo.monto_adeudado = sum(c.monto_total_pendiente() for c in prestamo.cuotas if not c.pagada)
-        
-        # Registrar en el log de auditoría
-        audit_change('update', 'cuota', cuota.id_cuota, changes={
-            'monto_ajuste': monto_ajuste,
-            'nota_ajuste': nota_ajuste,
-            'fecha_ajuste': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        })
+        prestamo.monto_adeudado = sum(c.monto_pendiente for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
         
         db.session.commit()
         flash('Ajuste manual registrado exitosamente', 'success')
@@ -1821,6 +1838,30 @@ def ajuste_manual(cuota_id):
         flash(f'Error al registrar el ajuste: {str(e)}', 'error')
     
     return redirect(url_for('cuotas_a_vencer'))
+
+@app.route('/marcar_proceso_judicial', methods=['POST'])
+@login_required
+@admin_required
+def marcar_proceso_judicial():
+    try:
+        data = request.get_json()
+        id_prestamo = data.get('id_prestamo')
+        prestamo = Prestamo.query.get_or_404(id_prestamo)
+        
+        # Usar el método marcar_judicial del modelo
+        prestamo.marcar_judicial()
+        
+        # Registrar en el log de auditoría
+        audit_change('update', 'prestamo', prestamo.id_prestamo, changes={
+            'estado': 'JUDICIAL',
+            'fecha_cambio': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")
