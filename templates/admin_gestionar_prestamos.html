@@ -1,0 +1,162 @@
+{% extends 'layout.html' %}
+{% block content %}
+<!-- Título principal -->
+<div class="table-section mb-4 mt-4">
+    <h2 class="mb-0 text-center fs-3 fw-bold">
+        Gestión de Préstamos y Cuotas
+    </h2>
+</div>
+<!-- Tabla principal -->
+<div class="table-section">
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered align-middle w-100">
+            <thead class="table-light">
+                <tr>
+                    <th>ID Préstamo</th>
+                    <th>Cliente</th>
+                    <th>Monto</th>
+                    <th>Estado</th>
+                    <th>Cuotas</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prestamo in prestamos %}
+                <tr>
+                    <td>{{ prestamo.id_prestamo }}</td>
+                    <td>{{ prestamo.cliente.nombre }} {{ prestamo.cliente.apellido }}</td>
+                    <td>${{ prestamo.monto_prestado }}</td>
+                    <td>{{ prestamo.estado.name }}</td>
+                    <td style="min-width: 350px;">
+                        <table class="table table-sm table-bordered mb-0 w-100">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Estado</th>
+                                    <th>Monto</th>
+                                    <th>Monto Pagado</th>
+                                    <th>Fecha Venc.</th>
+                                    <th>Fecha Pago</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cuota in prestamo.cuotas %}
+                                <tr {% if cuota.estado.name=='JUDICIAL' or cuota.proceso_judicial %}class="bg-red-100"
+                                    aria-label="Cuota judicializada" {% endif %}>
+                                    <form method="POST" action="{{ url_for('gestionar_prestamos') }}">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="cuota_id" value="{{ cuota.id_cuota }}">
+                                        <td tabindex="0">{{ cuota.numero_cuota }}</td>
+                                        <td>
+                                            <select name="nuevo_estado" class="form-select form-select-sm"
+                                                aria-label="Estado de la cuota" tabindex="0" {% if
+                                                cuota.estado.name=='JUDICIAL' or cuota.proceso_judicial %}disabled{%
+                                                endif %}>
+                                                {% for key, value in EstadoCuota.__members__.items() %}
+                                                <option value="{{ value.name }}" {% if cuota.estado.name==value.name
+                                                    %}selected{% endif %}>{{ value.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="number" step="0.01" name="monto" value="{{ cuota.monto }}"
+                                                class="form-control form-control-sm w-75" aria-label="Monto de la cuota"
+                                                tabindex="0" {% if cuota.estado.name=='JUDICIAL' or
+                                                cuota.proceso_judicial %}disabled{% endif %}>
+                                        </td>
+                                        <td>
+                                            <input type="number" step="0.01" name="monto_pagado"
+                                                value="{{ cuota.monto_pagado if cuota.monto_pagado else 0 }}"
+                                                class="form-control form-control-sm w-75" aria-label="Monto pagado"
+                                                tabindex="0" {% if cuota.estado.name=='JUDICIAL' or
+                                                cuota.proceso_judicial %}disabled{% endif %}>
+                                        </td>
+                                        <td tabindex="0">{{ cuota.fecha_vencimiento.strftime('%Y-%m-%d') }}</td>
+                                        <td>
+                                            <input type="date" name="fecha_pago"
+                                                value="{{ cuota.fecha_pago.strftime('%Y-%m-%d') if cuota.fecha_pago else '' }}"
+                                                class="form-control form-control-sm w-100" aria-label="Fecha de pago"
+                                                tabindex="0" {% if cuota.estado.name=='JUDICIAL' or
+                                                cuota.proceso_judicial %}disabled{% endif %}>
+                                        </td>
+                                        <td>
+                                            <button type="submit" class="btn btn-primary btn-sm"
+                                                aria-label="Guardar cambios de cuota" tabindex="0" {% if
+                                                cuota.estado.name=='JUDICIAL' or cuota.proceso_judicial %}disabled
+                                                class="opacity-50 cursor-not-allowed" {% endif %}>Guardar</button>
+                                            {% if cuota.estado.name == 'JUDICIAL' or cuota.proceso_judicial %}
+                                            <span class="text-red-600 font-semibold ml-2"
+                                                aria-label="Cuota judicializada">Judicializada</span>
+                                            {% endif %}
+                                        </td>
+                                    </form>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    /* Estilos para la tabla */
+    .table-section {
+        width: 100%;
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .table-responsive {
+        margin: 0;
+        padding: 0;
+        border: none;
+    }
+
+    .table {
+        margin: 0;
+        width: 100%;
+        table-layout: auto;
+    }
+
+    .table th {
+        background-color: #f3f4f6;
+        border-bottom: 2px solid #e5e7eb;
+        font-weight: 600;
+        color: #374151;
+        padding: 1rem;
+        white-space: nowrap;
+    }
+
+    .table td {
+        padding: 0.75rem 1rem;
+        vertical-align: middle;
+    }
+
+    .table tbody tr:hover {
+        background-color: #f9fafb;
+    }
+
+    /* Asegurar que la tabla ocupe todo el ancho disponible */
+    @media screen and (min-width: 1024px) {
+        .table-section {
+            min-width: 100vw;
+            margin-left: calc(-50vw + 50%);
+            margin-right: calc(-50vw + 50%);
+        }
+
+        .table-responsive {
+            overflow-x: visible;
+        }
+
+        .table {
+            width: 100%;
+            margin: 0 auto;
+            max-width: none;
+        }
+    }
+</style>
+{% endblock %}

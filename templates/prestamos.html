@@ -111,8 +111,8 @@
                                                 <div class="form-check">
                                                     {% if current_user.is_admin %}
                                                     <input class="form-check-input" type="checkbox"
-                                                        id="cuota-{{ cuota.id_cuota }}" {% if cuota.estado=='PAGADA'
-                                                        %}checked{% endif %}
+                                                        id="cuota-{{ cuota.id_cuota }}" {% if
+                                                        cuota.estado.name=='PAGADA' %}checked{% endif %}
                                                         onchange="actualizarEstadoCuota({{ cuota.id_cuota }}, this.checked)">
                                                     <label class="form-check-label" for="cuota-{{ cuota.id_cuota }}">
                                                         Marcar como pagada

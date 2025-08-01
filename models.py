@@ -132,6 +132,7 @@ class Prestamo(db.Model):
     fecha_inicio = db.Column(db.DateTime, nullable=False)
     fecha_finalizacion = db.Column(db.DateTime, nullable=True)
     estado = db.Column(db.Enum(EstadoPrestamo), nullable=False, default=EstadoPrestamo.ACTIVO)
+    proceso_judicial = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
@@ -143,12 +144,21 @@ class Prestamo(db.Model):
     cuotas = db.relationship('Cuota', backref='prestamo', lazy=True, cascade='all, delete-orphan')
 
     def marcar_judicial(self):
-        """Marca el préstamo y sus cuotas pendientes como judiciales"""
-        self.estado = EstadoPrestamo.JUDICIAL
-        for cuota in self.cuotas:
-            if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]:
-                cuota.estado = EstadoCuota.JUDICIAL
-        db.session.commit()
+        """Marca el préstamo y sus cuotas pendientes como judiciales, actualizando el monto adeudado"""
+        try:
+            self.estado = EstadoPrestamo.JUDICIAL
+            self.proceso_judicial = True
+            monto_adeudado = 0
+            for cuota in self.cuotas:
+                if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]:
+                    cuota.estado = EstadoCuota.JUDICIAL
+                    cuota.proceso_judicial = True
+                    monto_adeudado += (cuota.monto_pendiente or cuota.monto)
+            self.monto_adeudado = monto_adeudado
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise e
 
     def verificar_estado(self):
         """Verifica y actualiza el estado del préstamo basado en sus cuotas"""
@@ -179,12 +189,23 @@ class Cuota(db.Model):
     monto_pagado = db.Column(db.Float, default=0.0)
     monto_pendiente = db.Column(db.Float, nullable=True)
     estado = db.Column(db.Enum(EstadoCuota), nullable=False, default=EstadoCuota.PENDIENTE)
+    pagada = db.Column(db.Boolean, nullable=False, default=False)
     fecha_pago = db.Column(db.DateTime, nullable=True)
     nota_ajuste = db.Column(db.String(255), nullable=True)
+    proceso_judicial = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     updated_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    def actualizar_estado(self, pagada=None, estado=None):
+        """Actualiza el estado y el campo pagada manteniendo la sincronización"""
+        if pagada is not None:
+            self.pagada = pagada
+            self.estado = EstadoCuota.PAGADA if pagada else EstadoCuota.PENDIENTE
+        elif estado is not None:
+            self.estado = estado
+            self.pagada = (estado == EstadoCuota.PAGADA)
 
     def __repr__(self):
         return f'<Cuota {self.numero_cuota} del Préstamo {self.id_prestamo}>'
@@ -226,15 +247,6 @@ class Cuota(db.Model):
         
         # Actualizar cuotas pendientes del préstamo
         self.prestamo.actualizar_cuotas_pendientes()
-
-    def actualizar_estado(self):
-        """Actualiza el estado de la cuota basado en los montos"""
-        if self.estado == EstadoCuota.PAGADA:
-            self.estado = EstadoCuota.PAGADA
-        elif self.monto_pendiente < self.monto:
-            self.estado = EstadoCuota.PAGO_PARCIAL
-        else:
-            self.estado = EstadoCuota.PENDIENTE
 
     def registrar_pago(self, monto_pagado):
         """Registra un pago en la cuota y actualiza su estado"""

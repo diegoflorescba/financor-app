@@ -11,7 +11,7 @@ def update_estados():
         for prestamo in Prestamo.query.all():
             if prestamo.proceso_judicial:
                 prestamo.estado = EstadoPrestamo.JUDICIAL
-            elif all(cuota.pagada for cuota in prestamo.cuotas):
+            elif all(cuota.estado == EstadoCuota.PAGADA for cuota in prestamo.cuotas):
                 prestamo.estado = EstadoPrestamo.FINALIZADO
             else:
                 prestamo.estado = EstadoPrestamo.ACTIVO
@@ -20,7 +20,7 @@ def update_estados():
         for cuota in Cuota.query.all():
             if cuota.prestamo.estado == EstadoPrestamo.JUDICIAL:
                 cuota.estado = EstadoCuota.JUDICIAL
-            elif cuota.pagada:
+            elif cuota.estado == EstadoCuota.PAGADA:
                 cuota.estado = EstadoCuota.PAGADA
             elif cuota.monto_pagado > 0:
                 cuota.estado = EstadoCuota.PAGO_PARCIAL
@@ -28,6 +28,7 @@ def update_estados():
                 cuota.estado = EstadoCuota.PENDIENTE
 
         db.session.commit()
+        print("Estados de préstamos y cuotas actualizados correctamente.")
 
 if __name__ == '__main__':
     update_estados() 

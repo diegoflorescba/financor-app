@@ -22,14 +22,14 @@
                     <div class="form-group">
                         <label for="monto_prestado" class="form-label">Monto Prestado *</label>
                         <input type="number" id="monto_prestado" name="monto_prestado"
-                            class="form-control form-control-lg" required step="0.01">
+                            class="form-control form-control-lg" required>
                     </div>
 
                     <!-- Tasa de Interés -->
                     <div class="form-group">
                         <label for="tasa_interes" class="form-label">Tasa de Interés *</label>
                         <input type="number" id="tasa_interes" name="tasa_interes" class="form-control form-control-lg"
-                            required step="0.01">
+                            required>
                     </div>
 
                     <!-- Cantidad de Cuotas -->
@@ -43,13 +43,13 @@
                     <div class="form-group">
                         <label for="monto_cuotas" class="form-label">Monto por Cuota *</label>
                         <input type="number" id="monto_cuotas" name="monto_cuotas" class="form-control form-control-lg"
-                            required step="0.01">
+                            required>
                     </div>
 
                     <!-- Monto Total -->
                     <div class="form-group">
                         <label for="monto_adeudado" class="form-label">Monto Total</label>
-                        <input type="text" id="monto_adeudado" name="monto_adeudado"
+                        <input type="number" id="monto_adeudado" name="monto_adeudado"
                             class="form-control form-control-lg bg-light" readonly>
                     </div>
 
@@ -347,11 +347,16 @@
 
     function calcularMontos() {
         const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
-        const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+        const montoCuota = parseInt(document.getElementById('monto_cuotas').value) || 0;
+        const montoAdeudadoInput = document.getElementById('monto_adeudado');
 
         if (cuotasTotales && montoCuota) {
             const montoTotal = cuotasTotales * montoCuota;
-            document.getElementById('monto_adeudado').value = montoTotal.toFixed(2);
+            montoAdeudadoInput.value = montoTotal;
+            // Disparar un evento change para asegurar que otros listeners se enteren
+            montoAdeudadoInput.dispatchEvent(new Event('change'));
+        } else {
+            montoAdeudadoInput.value = '';
         }
     }
 
@@ -407,7 +412,7 @@
     function generarCuotas() {
         const fechaPrimeraCuota = document.getElementById('fecha_vencimiento_primera_cuota').value;
         const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
-        const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+        const montoCuota = parseInt(document.getElementById('monto_cuotas').value) || 0;
         const tbody = document.getElementById('cuotas-body');
         const fechaHoy = new Date();
 
@@ -442,7 +447,7 @@
             row.innerHTML = `
                 <td>${i + 1}</td>
                 <td>${formatearFecha(fechaISO)}</td>
-                <td>$${montoCuota.toFixed(2)}</td>
+                <td>$${montoCuota}</td>
                 <td class="${estadoClass}"><strong>${estado}</strong></td>
             `;
             tbody.appendChild(row);
