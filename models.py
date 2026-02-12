@@ -1,11 +1,50 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from flask_login import UserMixin
 from sqlalchemy.dialects.postgresql import JSON
 from enum import Enum
 
 # Crear la instancia de SQLAlchemy
 db = SQLAlchemy()
+
+# Tasa de interés diaria acumulativa: 0,05% = 0.0005
+TASA_INTERES_DIARIA = 0.0005
+
+# Día del mes desde el cual corre el interés si la cuota no se pagó (después del 10)
+DIA_LIMITE_INTERES = 11
+
+
+def fecha_desde_interes_habril(fecha_vencimiento):
+    """
+    Retorna la fecha desde la cual corre el interés para una cuota.
+    Es el día 11 del mes de vencimiento; si cae fin de semana, el siguiente día hábil.
+    """
+    if isinstance(fecha_vencimiento, datetime):
+        d = fecha_vencimiento.date()
+    else:
+        d = fecha_vencimiento
+    from calendar import monthrange
+    _, ultimo = monthrange(d.year, d.month)
+    dia_11 = date(d.year, d.month, min(11, ultimo))
+    # 0=lunes, 5=sábado, 6=domingo
+    w = dia_11.weekday()
+    if w == 5:  # sábado -> lunes
+        return dia_11 + timedelta(days=2)
+    if w == 6:  # domingo -> lunes
+        return dia_11 + timedelta(days=1)
+    return dia_11
+
+
+def interes_compuesto_diario(monto_base, dias):
+    """
+    Interés acumulativo diario al 0,05%: cada día se aplica 0,05% sobre
+    (capital + intereses ya generados). Retorna solo el interés acumulado.
+    Fórmula: monto_base * ((1 + TASA_INTERES_DIARIA)^dias - 1)
+    """
+    if dias <= 0 or monto_base <= 0:
+        return 0.0
+    factor = (1.0 + TASA_INTERES_DIARIA) ** dias
+    return round(monto_base * (factor - 1.0), 2)
 
 # Definición de modelos
 
@@ -210,21 +249,40 @@ class Cuota(db.Model):
     def __repr__(self):
         return f'<Cuota {self.numero_cuota} del Préstamo {self.id_prestamo}>'
 
+    def fecha_desde_interes(self):
+        """Fecha desde la cual corre el interés (día 11 del mes de vencimiento o siguiente día hábil)."""
+        return fecha_desde_interes_habril(self.fecha_vencimiento)
+
+    def dias_interes_actual(self):
+        """
+        Cantidad de días desde la fecha desde interés hasta hoy (solo si ya pasó esa fecha).
+        Retorna 0 si la cuota está pagada o si hoy es anterior al día desde interés.
+        """
+        if self.estado == EstadoCuota.PAGADA:
+            return 0
+        desde = self.fecha_desde_interes()
+        hoy = date.today()
+        if hoy < desde:
+            return 0
+        return (hoy - desde).days
+
     def calcular_interes_diario(self):
-        """Calcula el interés diario (0.5% por día) desde la fecha de vencimiento"""
+        """
+        Calcula el interés acumulativo diario (0,05% por día) desde el día 11 del mes
+        de vencimiento (o siguiente día hábil si el 11 cae fin de semana).
+        El interés es compuesto: cada día se aplica sobre capital + intereses previos.
+        """
         if self.estado == EstadoCuota.PAGADA:
             return 0.0
-        
-        fecha_actual = datetime.now()
-        if fecha_actual <= self.fecha_vencimiento:
+        monto = self.monto_pendiente or 0.0
+        if monto <= 0:
             return 0.0
-        
-        dias_atraso = (fecha_actual - self.fecha_vencimiento).days
-        return self.monto_pendiente * 0.005 * dias_atraso  # 0.5% por día
+        dias = self.dias_interes_actual()
+        return interes_compuesto_diario(monto, dias)
 
     def monto_total_pendiente(self):
-        """Retorna el monto total pendiente incluyendo intereses"""
-        return self.monto_pendiente + self.calcular_interes_diario()
+        """Retorna el monto total pendiente incluyendo intereses acumulativos."""
+        return (self.monto_pendiente or 0) + self.calcular_interes_diario()
 
     def registrar_pago_parcial(self, monto_pagado, es_ajuste_manual=False, nota_ajuste=None):
         """Registra un pago parcial en la cuota"""

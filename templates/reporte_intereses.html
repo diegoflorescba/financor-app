@@ -1,0 +1,172 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mb-4">
+    <div class="row justify-content-center g-3">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-purple-100 text-dark py-3">
+                    <h2 class="mb-0 text-center fs-3 fw-bold">
+                        <i class="fas fa-percentage me-2"></i>
+                        Reporte de intereses - Cuotas e intereses acumulativos
+                    </h2>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container mb-4">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <p class="text-muted mb-3">
+                Interés: <strong>0,05% diario acumulativo</strong>. Se aplica desde el <strong>día 11</strong> del mes de vencimiento
+                de cada cuota (o el siguiente día hábil si el 11 cae sábado o domingo). Cada día se aplica 0,05% sobre
+                el capital más los intereses ya generados: Interés = Adeudado × ((1 + 0,0005)<sup>días</sup> − 1).
+            </p>
+            <form method="get" action="{{ url_for('reporte_intereses') }}" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label for="tipo" class="form-label">Ver por</label>
+                    <select name="tipo" id="tipo" class="form-select" aria-label="Tipo de reporte">
+                        <option value="cuotas_vencer" {{ 'selected' if tipo == 'cuotas_vencer' else '' }}>
+                            Cuotas a vencer (hasta día 10 del mes actual)
+                        </option>
+                        <option value="prestamo" {{ 'selected' if tipo == 'prestamo' else '' }}>
+                            Un préstamo
+                        </option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="wrap-prestamo" style="{{ 'display: none;' if tipo != 'prestamo' else '' }}">
+                    <label for="prestamo_id" class="form-label">Préstamo</label>
+                    <select name="prestamo_id" id="prestamo_id" class="form-select" aria-label="Seleccionar préstamo">
+                        <option value="">-- Seleccione --</option>
+                        {% for p in prestamos_activos %}
+                        <option value="{{ p.id_prestamo }}" {{ 'selected' if prestamo_id == p.id_prestamo else '' }}>
+                            #{{ p.id_prestamo }} - {{ p.cliente.apellido }}, {{ p.cliente.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-1"></i>Actualizar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="container mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h3 class="mb-0 fs-5 text-secondary">{{ titulo_selector }}</h3>
+        <div>
+            {% if tipo == 'prestamo' and prestamo_id %}
+            <a href="{{ url_for('reporte_intereses_exportar_excel', tipo='prestamo', prestamo_id=prestamo_id) }}" class="btn btn-outline-success btn-sm me-2">
+                <i class="fas fa-file-excel me-2"></i>Exportar Excel
+            </a>
+            <a href="{{ url_for('reporte_intereses_exportar_pdf', tipo='prestamo', prestamo_id=prestamo_id) }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-file-pdf me-2"></i>Exportar PDF
+            </a>
+            {% else %}
+            <a href="{{ url_for('reporte_intereses_exportar_excel', tipo='cuotas_vencer') }}" class="btn btn-outline-success btn-sm me-2">
+                <i class="fas fa-file-excel me-2"></i>Exportar Excel
+            </a>
+            <a href="{{ url_for('reporte_intereses_exportar_pdf', tipo='cuotas_vencer') }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-file-pdf me-2"></i>Exportar PDF
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="table-section">
+    <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Cliente</th>
+                    <th class="text-center">Cuota</th>
+                    <th>Vencimiento</th>
+                    <th class="text-end">Adeudado</th>
+                    <th>Fecha desde interés</th>
+                    <th class="text-center">Días</th>
+                    <th class="text-end">Interés acumulado</th>
+                    <th class="text-end">Total con interés</th>
+                    <th>Detalle del cálculo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in filas %}
+                <tr>
+                    <td>{{ r.cuota.prestamo.cliente.apellido }}, {{ r.cuota.prestamo.cliente.nombre }}</td>
+                    <td class="text-center">{{ r.cuota.numero_cuota }}/{{ r.cuota.prestamo.cuotas_totales }}</td>
+                    <td>{{ r.cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                    <td class="text-end">${{ '{:,.2f}'.format(r.adeudado).replace(',', '.') }}</td>
+                    <td>{{ r.fecha_desde_interes.strftime('%d/%m/%Y') }}</td>
+                    <td class="text-center">{{ r.dias }}</td>
+                    <td class="text-end">${{ '{:,.2f}'.format(r.interes_acumulado).replace(',', '.') }}</td>
+                    <td class="text-end fw-bold">${{ '{:,.2f}'.format(r.total_con_interes).replace(',', '.') }}</td>
+                    <td class="small text-muted">{{ r.detalle_calculo }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-4">No hay cuotas pendientes para el criterio seleccionado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if filas %}
+<div class="container mt-4">
+    <div class="card bg-light">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="fw-bold text-secondary">Total adeudado (capital)</div>
+                    <div class="fs-5">${{ '{:,.2f}'.format(total_adeudado).replace(',', '.') }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="fw-bold text-secondary">Total intereses</div>
+                    <div class="fs-5">${{ '{:,.2f}'.format(total_interes).replace(',', '.') }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="fw-bold text-secondary">Total a cobrar</div>
+                    <div class="fs-5 fw-bold">${{ '{:,.2f}'.format(total_a_cobrar).replace(',', '.') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+    .table-section {
+        width: 100%;
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .table th {
+        background-color: #f3f4f6;
+        font-weight: 600;
+    }
+</style>
+
+<script>
+(function() {
+    var tipo = document.getElementById('tipo');
+    var wrapPrestamo = document.getElementById('wrap-prestamo');
+    var prestamoId = document.getElementById('prestamo_id');
+
+    function togglePrestamo() {
+        wrapPrestamo.style.display = tipo.value === 'prestamo' ? '' : 'none';
+        if (tipo.value !== 'prestamo') prestamoId.removeAttribute('required');
+        else prestamoId.setAttribute('required', 'required');
+    }
+    tipo.addEventListener('change', togglePrestamo);
+    togglePrestamo();
+})();
+</script>
+{% endblock %}

@@ -2,7 +2,10 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from datetime import datetime, date, timedelta
 from calendar import monthrange
 from dateutil.relativedelta import relativedelta
-from models import db, Cliente, Prestamo, Cuota, Garante, User, AuditLog, EstadoPrestamo, EstadoCuota, Pago
+from models import (
+    db, Cliente, Prestamo, Cuota, Garante, User, AuditLog, EstadoPrestamo, EstadoCuota, Pago,
+    TASA_INTERES_DIARIA,
+)
 import os
 import pandas as pd
 import io
@@ -20,6 +23,11 @@ from flask_wtf.csrf import CSRFProtect
 from auth_routes import auth
 from functools import wraps
 import zipfile
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
 
 
 app = Flask(__name__)
@@ -355,6 +363,238 @@ def reportes():
                          adeudado_mes_siguiente=adeudado_mes_siguiente,
                          total_proceso_judicial=total_proceso_judicial,
                          active_page='reportes')
+
+
+def _filas_reporte_intereses(cuotas):
+    """Construye las filas del reporte de intereses para una lista de cuotas."""
+    filas = []
+    for c in cuotas:
+        adeudado = c.monto_pendiente or 0
+        desde = c.fecha_desde_interes()
+        dias = c.dias_interes_actual()
+        interes = c.calcular_interes_diario()
+        total = adeudado + interes
+        filas.append({
+            'cuota': c,
+            'adeudado': adeudado,
+            'fecha_desde_interes': desde,
+            'dias': dias,
+            'tasa_diaria_pct': 0.05,
+            'interes_acumulado': interes,
+            'total_con_interes': total,
+            'detalle_calculo': (
+                f"Adeudado ${adeudado:,.2f} × ((1 + 0,05%)^{dias} - 1) = ${interes:,.2f}"
+                if dias > 0 else "Sin días de interés"
+            ),
+        })
+    return filas
+
+
+@app.route('/reporte_intereses')
+@user_required
+def reporte_intereses():
+    """Reporte de cuotas con intereses: selector por préstamo o por cuotas a vencer."""
+    tipo = request.args.get('tipo', 'cuotas_vencer')
+    prestamo_id = request.args.get('prestamo_id', type=int)
+    cuotas = []
+    titulo_selector = ""
+    prestamos_activos = Prestamo.query.filter(
+        Prestamo.estado == EstadoPrestamo.ACTIVO,
+        Prestamo.monto_adeudado > 0
+    ).order_by(Prestamo.id_prestamo).all()
+
+    if tipo == 'prestamo' and prestamo_id:
+        prestamo = Prestamo.query.filter_by(id_prestamo=prestamo_id).first()
+        if not prestamo:
+            flash('Préstamo no encontrado.', 'error')
+            return redirect(url_for('reporte_intereses'))
+        cuotas = [
+            c for c in prestamo.cuotas
+            if c.estado in (EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL)
+        ]
+        cuotas.sort(key=lambda c: (c.fecha_vencimiento, c.numero_cuota))
+        titulo_selector = f"Préstamo #{prestamo.id_prestamo} - {prestamo.cliente.apellido}, {prestamo.cliente.nombre}"
+    else:
+        today = date.today()
+        cuotas = Cuota.query.join(Prestamo).join(Cliente).filter(
+            Cuota.fecha_vencimiento.between(
+                datetime(today.year, today.month, 1),
+                datetime(today.year, today.month, 10)
+            ),
+            Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL])
+        ).order_by(Cliente.apellido, Cliente.nombre, Cuota.fecha_vencimiento).all()
+        titulo_selector = f"Cuotas a vencer (hasta día 10 - {today.strftime('%B %Y')})".capitalize()
+
+    filas = _filas_reporte_intereses(cuotas)
+    total_adeudado = sum(r['adeudado'] for r in filas)
+    total_interes = sum(r['interes_acumulado'] for r in filas)
+    total_a_cobrar = sum(r['total_con_interes'] for r in filas)
+
+    return render_template(
+        'reporte_intereses.html',
+        filas=filas,
+        tipo=tipo,
+        prestamo_id=prestamo_id,
+        prestamos_activos=prestamos_activos,
+        titulo_selector=titulo_selector,
+        total_adeudado=total_adeudado,
+        total_interes=total_interes,
+        total_a_cobrar=total_a_cobrar,
+        tasa_diaria_pct=0.05,
+        active_page='reportes',
+    )
+
+
+@app.route('/reporte_intereses/exportar_excel')
+@user_required
+def reporte_intereses_exportar_excel():
+    tipo = request.args.get('tipo', 'cuotas_vencer')
+    prestamo_id = request.args.get('prestamo_id', type=int)
+    cuotas = []
+    if tipo == 'prestamo' and prestamo_id:
+        prestamo = Prestamo.query.filter_by(id_prestamo=prestamo_id).first()
+        if prestamo:
+            cuotas = [
+                c for c in prestamo.cuotas
+                if c.estado in (EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL)
+            ]
+            cuotas.sort(key=lambda c: (c.fecha_vencimiento, c.numero_cuota))
+    else:
+        today = date.today()
+        cuotas = Cuota.query.join(Prestamo).join(Cliente).filter(
+            Cuota.fecha_vencimiento.between(
+                datetime(today.year, today.month, 1),
+                datetime(today.year, today.month, 10)
+            ),
+            Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL])
+        ).order_by(Cliente.apellido, Cliente.nombre, Cuota.fecha_vencimiento).all()
+
+    filas = _filas_reporte_intereses(cuotas)
+    data = []
+    for r in filas:
+        c = r['cuota']
+        data.append({
+            'Cliente': f"{c.prestamo.cliente.apellido}, {c.prestamo.cliente.nombre}",
+            'Préstamo': c.prestamo.id_prestamo,
+            'Cuota': f"{c.numero_cuota}/{c.prestamo.cuotas_totales}",
+            'Vencimiento': c.fecha_vencimiento.strftime('%d/%m/%Y'),
+            'Adeudado ($)': r['adeudado'],
+            'Fecha desde interés': r['fecha_desde_interes'].strftime('%d/%m/%Y'),
+            'Días': r['dias'],
+            'Tasa diaria (%)': r['tasa_diaria_pct'],
+            'Interés acumulado ($)': r['interes_acumulado'],
+            'Total con interés ($)': r['total_con_interes'],
+            'Detalle cálculo': r['detalle_calculo'],
+        })
+    df = pd.DataFrame(data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='Reporte intereses', index=False)
+        worksheet = writer.sheets['Reporte intereses']
+        for idx, col in enumerate(df.columns):
+            max_len = len(col)
+            if len(df) > 0:
+                col_max = df[col].astype(str).apply(len).max()
+                max_len = max(max_len, int(col_max))
+            worksheet.set_column(idx, idx, min(max_len + 2, 50))
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'reporte_intereses_{date.today().strftime("%Y%m%d")}.xlsx'
+    )
+
+
+@app.route('/reporte_intereses/exportar_pdf')
+@user_required
+def reporte_intereses_exportar_pdf():
+    tipo = request.args.get('tipo', 'cuotas_vencer')
+    prestamo_id = request.args.get('prestamo_id', type=int)
+    cuotas = []
+    if tipo == 'prestamo' and prestamo_id:
+        prestamo = Prestamo.query.filter_by(id_prestamo=prestamo_id).first()
+        if prestamo:
+            cuotas = [
+                c for c in prestamo.cuotas
+                if c.estado in (EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL)
+            ]
+            cuotas.sort(key=lambda c: (c.fecha_vencimiento, c.numero_cuota))
+    else:
+        today = date.today()
+        cuotas = Cuota.query.join(Prestamo).join(Cliente).filter(
+            Cuota.fecha_vencimiento.between(
+                datetime(today.year, today.month, 1),
+                datetime(today.year, today.month, 10)
+            ),
+            Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL])
+        ).order_by(Cliente.apellido, Cliente.nombre, Cuota.fecha_vencimiento).all()
+
+    filas = _filas_reporte_intereses(cuotas)
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1.5*cm, leftMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'ReportTitle', parent=styles['Heading1'], fontSize=14, spaceAfter=12
+    )
+    elements = [
+        Paragraph("Reporte de intereses - Cuotas e intereses acumulativos", title_style),
+        Paragraph(
+            "Interés: 0,05% diario acumulativo. Se aplica desde el día 11 del mes de vencimiento "
+            "(o siguiente día hábil si el 11 cae fin de semana).",
+            styles['Normal']
+        ),
+        Spacer(1, 12),
+    ]
+    if not filas:
+        elements.append(Paragraph("No hay cuotas pendientes para el criterio seleccionado.", styles['Normal']))
+    else:
+        headers = [
+            'Cliente', 'Cuota', 'Venc.', 'Adeudado', 'Desde interés', 'Días',
+            'Interés acum.', 'Total'
+        ]
+        table_data = [headers]
+        for r in filas:
+            c = r['cuota']
+            table_data.append([
+                f"{c.prestamo.cliente.apellido}, {c.prestamo.cliente.nombre}"[:25],
+                f"{c.numero_cuota}/{c.prestamo.cuotas_totales}",
+                c.fecha_vencimiento.strftime('%d/%m/%Y'),
+                f"{r['adeudado']:,.2f}",
+                r['fecha_desde_interes'].strftime('%d/%m/%Y'),
+                str(r['dias']),
+                f"{r['interes_acumulado']:,.2f}",
+                f"{r['total_con_interes']:,.2f}",
+            ])
+        total_adeudado = sum(x['adeudado'] for x in filas)
+        total_interes = sum(x['interes_acumulado'] for x in filas)
+        total_a_cobrar = sum(x['total_con_interes'] for x in filas)
+        table_data.append([
+            '', '', '', f"{total_adeudado:,.2f}", '', '', f"{total_interes:,.2f}", f"{total_a_cobrar:,.2f}"
+        ])
+        t = Table(table_data, colWidths=[None, 3*cm, 2.2*cm, 2.5*cm, 2.5*cm, 1.5*cm, 2.5*cm, 2.5*cm])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e5e7eb')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f3f4f6')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ])
+        t._argW[0] = 5*cm
+        elements.append(t)
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'reporte_intereses_{date.today().strftime("%Y%m%d")}.pdf'
+    )
 
 
 @app.route('/cuotas_a_vencer')

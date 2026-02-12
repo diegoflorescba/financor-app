@@ -28,6 +28,7 @@ typing_extensions==4.8.0
 tzdata==2023.3
 urllib3==2.1.0
 XlsxWriter==3.1.9
+reportlab==4.0.7
 gunicorn==21.2.0
 greenlet==3.0.1
 email-validator==2.1.0.post1
