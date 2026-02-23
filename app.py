@@ -1488,9 +1488,16 @@ def generar_contrato(prestamo_id):
         # Cargar el template
         doc = Document('templates/template_mutuo.docx')
         
+        # Fecha de firma del mutuo (día y mes para rellenar en el docx)
+        fecha_firma_mutuo = datetime.now()
+        dia_mutuo = str(fecha_firma_mutuo.day)
+        mes_letra_mutuo = fecha_firma_mutuo.strftime('%B').capitalize()
+        
         # Crear diccionario con todos los reemplazos
         replacements = {
-            '{fecha_actual}': datetime.now().strftime('%d/%m/%Y'),
+            '{fecha_actual}': fecha_firma_mutuo.strftime('%d/%m/%Y'),
+            '{dia_mutuo}': dia_mutuo,
+            '{mes_letra_mutuo}': mes_letra_mutuo,
             '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
             '{dni}': cliente.dni,
             '{domicilio}': cliente.direccion or '',
@@ -1512,11 +1519,20 @@ def generar_contrato(prestamo_id):
                 '{telefono_garante}': garante.telefono or ''
             })
         
-        # Reemplazar en el documento
+        # Reemplazar en párrafos
         for paragraph in doc.paragraphs:
             for key, value in replacements.items():
                 if key in paragraph.text:
                     paragraph.text = paragraph.text.replace(key, value)
+        # Reemplazar en celdas de tablas
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for key, value in replacements.items():
+                        if key in cell.text:
+                            for paragraph in cell.paragraphs:
+                                if key in paragraph.text:
+                                    paragraph.text = paragraph.text.replace(key, value)
         
         # Guardar temporalmente
         temp_path = f'temp/contrato_prestamo_{prestamo_id}.docx'
@@ -1581,7 +1597,20 @@ def generar_pagare(prestamo_id):
             
             # Calcular la fecha del primer día hábil del mes de vencimiento
             fecha_firma = obtener_primer_dia_habil(cuota.fecha_vencimiento)
-            
+            # Vencimiento del pagaré: día 5 del mes correlativo (N1 → 5 del mes de la cuota 1, N2 → 5 del mes de la cuota 2, etc.)
+            try:
+                locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+            except locale.Error:
+                pass
+            vencimiento_pagare = date(
+                cuota.fecha_vencimiento.year,
+                cuota.fecha_vencimiento.month,
+                5
+            )
+            dia_vencimiento_pagare = '5'
+            mes_vencimiento_pagare = vencimiento_pagare.strftime('%B').capitalize()
+            ano_vencimiento_pagare = str(vencimiento_pagare.year)
+
             # Crear diccionario con los reemplazos necesarios
             replacements = {
                 '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
@@ -1594,14 +1623,27 @@ def generar_pagare(prestamo_id):
                 '{ano_pagare}': str(fecha_firma.year),
                 '{cuota_mensual_numeros}': f"${format_money(cuota.monto)}",
                 '{numero_pagare}': str(cuota.numero_cuota),
-                '{vencimiento_pagare}': cuota.fecha_vencimiento.strftime('%d/%m/%Y')
+                '{vencimiento_pagare}': cuota.fecha_vencimiento.strftime('%d/%m/%Y'),
+                '{dia_vencimiento_pagare}': dia_vencimiento_pagare,
+                '{mes_vencimiento_pagare}': mes_vencimiento_pagare,
+                '{año_vencimiento_pagare}': ano_vencimiento_pagare,
+                '{ano_vencimiento_pagare}': ano_vencimiento_pagare,
             }
             
-            # Reemplazar en el documento
+            # Reemplazar en párrafos
             for paragraph in doc.paragraphs:
                 for key, value in replacements.items():
                     if key in paragraph.text:
                         paragraph.text = paragraph.text.replace(key, value)
+            # Reemplazar en celdas de tablas
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for key, value in replacements.items():
+                            if key in cell.text:
+                                for paragraph in cell.paragraphs:
+                                    if key in paragraph.text:
+                                        paragraph.text = paragraph.text.replace(key, value)
             
             # Guardar temporalmente
             temp_path = f'temp/pagare_prestamo_{prestamo_id}_cuota_{cuota.numero_cuota}.docx'
