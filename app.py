@@ -1511,29 +1511,50 @@ def generar_contrato(prestamo_id):
             '{fecha_primera_cuota}': prestamo.cuotas[0].fecha_vencimiento.strftime('%d/%m/%Y'),
         }
         
+        # Siempre definir placeholders del garante (con datos o vacío si no hay garante)
         if garante:
             replacements.update({
                 '{nombre_apellido_garante}': f"{garante.nombre} {garante.apellido}",
-                '{dni_garante}': garante.dni,
+                '{dni_garante}': garante.dni or '',
                 '{domicilio_garante}': garante.direccion or '',
                 '{telefono_garante}': garante.telefono or ''
             })
-        
-        # Reemplazar en párrafos
-        for paragraph in doc.paragraphs:
+        else:
+            replacements.update({
+                '{nombre_apellido_garante}': '',
+                '{dni_garante}': '',
+                '{domicilio_garante}': '',
+                '{telefono_garante}': ''
+            })
+
+        def reemplazar_en_parrafo(paragraph):
             for key, value in replacements.items():
                 if key in paragraph.text:
                     paragraph.text = paragraph.text.replace(key, value)
-        # Reemplazar en celdas de tablas
-        for table in doc.tables:
+
+        def reemplazar_en_tabla(table):
             for row in table.rows:
                 for cell in row.cells:
-                    for key, value in replacements.items():
-                        if key in cell.text:
-                            for paragraph in cell.paragraphs:
-                                if key in paragraph.text:
-                                    paragraph.text = paragraph.text.replace(key, value)
-        
+                    for paragraph in cell.paragraphs:
+                        reemplazar_en_parrafo(paragraph)
+
+        # Reemplazar en párrafos del cuerpo
+        for paragraph in doc.paragraphs:
+            reemplazar_en_parrafo(paragraph)
+        # Reemplazar en tablas del cuerpo
+        for table in doc.tables:
+            reemplazar_en_tabla(table)
+        # Reemplazar en encabezados y pies de cada sección
+        for section in doc.sections:
+            for paragraph in section.header.paragraphs:
+                reemplazar_en_parrafo(paragraph)
+            for table in section.header.tables:
+                reemplazar_en_tabla(table)
+            for paragraph in section.footer.paragraphs:
+                reemplazar_en_parrafo(paragraph)
+            for table in section.footer.tables:
+                reemplazar_en_tabla(table)
+
         # Guardar temporalmente
         temp_path = f'temp/contrato_prestamo_{prestamo_id}.docx'
         os.makedirs('temp', exist_ok=True)
