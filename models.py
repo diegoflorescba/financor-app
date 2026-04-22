@@ -45,15 +45,13 @@ class User(UserMixin, db.Model):
         self.password = generate_password_hash(password)
 
     def check_password(self, password):
-        # Soporte de migración: si la contraseña almacenada no es un hash, comparar en texto plano
-        # y actualizar al hash automáticamente
-        try:
-            return check_password_hash(self.password, password)
-        except Exception:
-            if self.password == password:
-                self.password = generate_password_hash(password)
-                return True
-            return False
+        # Intentar hash primero; si falla, fallback a texto plano (migración) y hashear al vuelo
+        if check_password_hash(self.password, password):
+            return True
+        if self.password == password:
+            self.password = generate_password_hash(password)
+            return True
+        return False
     
     def __repr__(self):
         return f'<User {self.username}>'

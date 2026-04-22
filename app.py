@@ -323,25 +323,16 @@ def reportes():
         if c.fecha_vencimiento.month == fecha_siguiente.month and c.fecha_vencimiento.year == fecha_siguiente.year
     )
 
-    # Calcular total de proceso judicial usando el monto total de las cuotas
+    # Calcular total de proceso judicial usando el monto pendiente de las cuotas judiciales
     prestamos_judiciales = Prestamo.query.filter(
-        db.or_(
-            Prestamo.estado == EstadoPrestamo.JUDICIAL,
-            Prestamo.proceso_judicial == True
-        )
+        Prestamo.estado == EstadoPrestamo.JUDICIAL
     ).all()
-    
-    # Calcular el total sumando el monto de las cuotas judiciales
+
     total_proceso_judicial = 0
     for prestamo in prestamos_judiciales:
-        total_proceso_judicial += sum(c.monto for c in prestamo.cuotas if c.estado == EstadoCuota.JUDICIAL)
-    
-    # Agregar logging para diagnóstico
-    app.logger.info(f"Préstamos judiciales encontrados: {len(prestamos_judiciales)}")
-    for p in prestamos_judiciales:
-        cuotas_judiciales = [c for c in p.cuotas if c.estado == EstadoCuota.JUDICIAL]
-        total_cuotas = sum(c.monto for c in cuotas_judiciales)
-        app.logger.info(f"Préstamo {p.id_prestamo}: total_cuotas_judiciales={total_cuotas}, estado={p.estado.name}, proceso_judicial={p.proceso_judicial}")
+        total_proceso_judicial += sum(
+            (c.monto_pendiente or c.monto) for c in prestamo.cuotas if c.estado == EstadoCuota.JUDICIAL
+        )
 
     return render_template('reportes.html',
                          prestamos=prestamos,
@@ -367,20 +358,19 @@ def cuotas_a_vencer():
     # Capitalizar la primera letra del mes
     mes_actual = today.strftime('%B %Y').capitalize()
     
-    # Filtrar cuotas:
-    # - Del mes actual
-    # - Que venzan antes del día 10
-    # - Que no estén pagadas
+    from calendar import monthrange
+    ultimo_dia = monthrange(today.year, today.month)[1]
     cuotas = Cuota.query.join(Prestamo).join(Cliente).filter(
         Cuota.fecha_vencimiento.between(
             datetime(today.year, today.month, 1),
-            datetime(today.year, today.month, 10)
+            datetime(today.year, today.month, ultimo_dia, 23, 59, 59)
         ),
-        Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL])
+        Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]),
+        Prestamo.estado != EstadoPrestamo.JUDICIAL
     ).order_by(Cuota.fecha_vencimiento).all()
 
-    # Calcular el total a cobrar
-    total_a_cobrar = sum(cuota.monto for cuota in cuotas)
+    # Calcular el total a cobrar usando monto pendiente
+    total_a_cobrar = sum((cuota.monto_pendiente or cuota.monto) for cuota in cuotas)
 
     return render_template('cuotas_a_vencer.html',
                          cuotas=cuotas,
@@ -1345,14 +1335,47 @@ def actualizar_estado_cuota():
         id_cuota = data.get('id_cuota')
         pagada = data.get('pagada')
 
-        # Cambiar query.get() por db.session.get()
         cuota = db.session.get(Cuota, id_cuota)
-        
-        if cuota:
-            cuota.estado = EstadoCuota.PAGADA if pagada else EstadoCuota.PENDIENTE
-            db.session.commit()
-            return jsonify({'success': True})
-        return jsonify({'success': False, 'error': 'Cuota no encontrada'})
+        if not cuota:
+            return jsonify({'success': False, 'error': 'Cuota no encontrada'})
+
+        prestamo = cuota.prestamo
+
+        if pagada:
+            cuota.estado = EstadoCuota.PAGADA
+            cuota.pagada = True
+            cuota.monto_pagado = cuota.monto
+            cuota.monto_pendiente = 0.0
+            cuota.fecha_pago = datetime.now()
+        else:
+            cuota.estado = EstadoCuota.PENDIENTE
+            cuota.pagada = False
+            cuota.monto_pagado = 0.0
+            cuota.monto_pendiente = cuota.monto
+            cuota.fecha_pago = None
+
+        prestamo.cuotas_pendientes = sum(
+            1 for c in prestamo.cuotas
+            if c.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]
+        )
+        prestamo.monto_adeudado = sum(
+            (c.monto_pendiente or 0) for c in prestamo.cuotas
+            if c.estado != EstadoCuota.PAGADA
+        )
+
+        if prestamo.cuotas_pendientes == 0 and prestamo.estado != EstadoPrestamo.JUDICIAL:
+            prestamo.estado = EstadoPrestamo.FINALIZADO
+            prestamo.fecha_finalizacion = datetime.now()
+        elif prestamo.cuotas_pendientes > 0 and prestamo.estado == EstadoPrestamo.FINALIZADO:
+            prestamo.estado = EstadoPrestamo.ACTIVO
+            prestamo.fecha_finalizacion = None
+
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'cuotas_pendientes': prestamo.cuotas_pendientes,
+            'monto_adeudado': prestamo.monto_adeudado
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)})
