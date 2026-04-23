@@ -1898,9 +1898,8 @@ def pago_parcial(cuota_id):
             flash('La cuota no está en estado válido para pago parcial.', 'error')
             return redirect(url_for('cuotas_a_vencer'))
         monto_pagado = float(request.form.get('monto_pagado', 0))
-        saldo_pendiente = cuota.monto_pendiente or 0
-        if monto_pagado <= 0 or monto_pagado > saldo_pendiente:
-            flash('El monto del pago debe ser mayor a 0 y no superar el saldo pendiente.', 'error')
+        if monto_pagado <= 0:
+            flash('El monto del pago debe ser mayor a 0.', 'error')
             return redirect(url_for('cuotas_a_vencer'))
         interes_pagado = None
         interes_str = request.form.get('interes_acumulado', '').strip()
@@ -1915,9 +1914,20 @@ def pago_parcial(cuota_id):
                 return redirect(url_for('cuotas_a_vencer'))
         marcar_pagada = request.form.get('marcar_pagada') == 'on'
         nota_pago = request.form.get('nota_pago', '')
+        # saldo_pendiente = monto de capital restante (sin interés)
+        saldo_pendiente = cuota.monto_pendiente if cuota.monto_pendiente is not None else cuota.monto
+        interes_val = float(interes_pagado) if interes_pagado else 0.0
+        if marcar_pagada:
+            # Forzar pago del capital restante sin importar el monto ingresado
+            monto_principal = saldo_pendiente
+        else:
+            monto_principal = monto_pagado - interes_val
+            if monto_principal <= 0 or monto_principal > saldo_pendiente:
+                flash('El monto del pago debe ser mayor a 0 y no superar el saldo pendiente.', 'error')
+                return redirect(url_for('cuotas_a_vencer'))
         tipo_pago = 'total' if marcar_pagada else 'parcial'
         pago = cuota.registrar_pago_con_trazabilidad(
-            monto_pagado=monto_pagado,
+            monto_pagado=monto_principal,
             interes_pagado=interes_pagado,
             tipo_pago=tipo_pago,
             nota=nota_pago,
@@ -1943,7 +1953,7 @@ def ajuste_manual(cuota_id):
             flash('La cuota no está en estado válido para ajuste manual.', 'error')
             return redirect(url_for('cuotas_a_vencer'))
         monto_ajuste = float(request.form.get('monto_ajuste', 0))
-        saldo_pendiente = cuota.monto_pendiente or 0
+        saldo_pendiente = cuota.monto_pendiente if cuota.monto_pendiente is not None else cuota.monto
         if monto_ajuste <= 0 or monto_ajuste > saldo_pendiente:
             flash('El monto del ajuste debe ser mayor a 0 y no superar el saldo pendiente.', 'error')
             return redirect(url_for('cuotas_a_vencer'))
