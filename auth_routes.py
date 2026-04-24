@@ -22,9 +22,9 @@ def login():
             flash('Por favor ingrese usuario y contraseña', 'error')
             return render_template('auth/login.html')
             
-        user = User.query.filter_by(username=username, password=password).first()
-        
-        if user:
+        user = User.query.filter_by(username=username).first()
+
+        if user and user.check_password(password):
             login_user(user, remember=remember)  # Usar el valor de remember
             user.last_login = datetime.utcnow()
             db.session.commit()
@@ -61,15 +61,15 @@ def change_password():
         new_password = request.form.get('new_password')
         confirm_password = request.form.get('confirm_password')
         
-        if current_user.password != current_password:
+        if not current_user.check_password(current_password):
             flash('Contraseña actual incorrecta', 'error')
             return redirect(url_for('auth.change_password'))
-            
+
         if new_password != confirm_password:
             flash('Las contraseñas no coinciden', 'error')
             return redirect(url_for('auth.change_password'))
-            
-        current_user.password = new_password
+
+        current_user.set_password(new_password)
         db.session.commit()
         flash('Contraseña cambiada exitosamente', 'success')
         return redirect(url_for('auth.profile'))
@@ -126,12 +126,12 @@ def create_user():
 
         new_user = User(
             username=username.strip(),
-            email=email.strip(),  # Ahora siempre tendremos un email
+            email=email.strip(),
             role=role,
             is_active=True,
             created_by=current_user.id
         )
-        new_user.password = password
+        new_user.set_password(password)
 
         db.session.add(new_user)
         db.session.commit()
@@ -213,9 +213,8 @@ def update_user():
         user.username = username
         user.role = 'admin' if is_admin else 'user'
         
-        # Actualizar contraseña solo si se proporciona una nueva
         if password:
-            user.password = password
+            user.set_password(password)
             
         user.updated_by = current_user.id
         db.session.commit()

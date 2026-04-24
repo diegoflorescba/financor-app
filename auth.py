@@ -21,7 +21,9 @@ def user_required(f):
 
 def audit_change(action, table_name, record_id, changes=None):
     """Registra un cambio en la base de datos"""
-    if current_user.is_authenticated:
+    if not current_user.is_authenticated:
+        return
+    try:
         audit = AuditLog(
             user_id=current_user.id,
             action=action,
@@ -30,7 +32,9 @@ def audit_change(action, table_name, record_id, changes=None):
             changes=changes
         )
         db.session.add(audit)
-        db.session.commit()
+        db.session.flush()
+    except Exception:
+        pass
 
 def get_changes(old_obj, new_obj):
     """Compara dos objetos y retorna los cambios"""

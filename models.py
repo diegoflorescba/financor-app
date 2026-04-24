@@ -2,6 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_login import UserMixin
 from sqlalchemy.dialects.postgresql import JSON
+from werkzeug.security import generate_password_hash, check_password_hash
 from enum import Enum
 
 # Crear la instancia de SQLAlchemy
@@ -41,12 +42,16 @@ class User(UserMixin, db.Model):
         return self.role == 'admin'
     
     def set_password(self, password):
-        """Establece la contraseña del usuario."""
-        self.password = password  # En este caso guardamos la contraseña en texto plano
-        
+        self.password = generate_password_hash(password)
+
     def check_password(self, password):
-        """Verifica la contraseña del usuario."""
-        return self.password == password  # Comparación directa ya que está en texto plano
+        # Intentar hash primero; si falla, fallback a texto plano (migración) y hashear al vuelo
+        if check_password_hash(self.password, password):
+            return True
+        if self.password == password:
+            self.password = generate_password_hash(password)
+            return True
+        return False
     
     def __repr__(self):
         return f'<User {self.username}>'
@@ -145,35 +150,29 @@ class Prestamo(db.Model):
 
     def marcar_judicial(self):
         """Marca el préstamo y sus cuotas pendientes como judiciales, actualizando el monto adeudado"""
-        try:
-            self.estado = EstadoPrestamo.JUDICIAL
-            self.proceso_judicial = True
-            monto_adeudado = 0
-            for cuota in self.cuotas:
-                if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]:
-                    cuota.estado = EstadoCuota.JUDICIAL
-                    cuota.proceso_judicial = True
-                    monto_adeudado += (cuota.monto_pendiente or cuota.monto)
-            self.monto_adeudado = monto_adeudado
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            raise e
+        self.estado = EstadoPrestamo.JUDICIAL
+        self.proceso_judicial = True
+        monto_adeudado = 0
+        for cuota in self.cuotas:
+            if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]:
+                cuota.estado = EstadoCuota.JUDICIAL
+                cuota.pagada = False
+                cuota.proceso_judicial = True
+                monto_adeudado += (cuota.monto_pendiente or cuota.monto)
+        self.monto_adeudado = monto_adeudado
 
     def verificar_estado(self):
         """Verifica y actualiza el estado del préstamo basado en sus cuotas"""
         if self.estado == EstadoPrestamo.JUDICIAL:
-            return  # Si está en judicial, no cambia
+            return
 
         todas_pagadas = all(cuota.estado == EstadoCuota.PAGADA for cuota in self.cuotas)
-        if todas_pagadas:
+        if todas_pagadas and self.cuotas:
             self.estado = EstadoPrestamo.FINALIZADO
             self.fecha_finalizacion = datetime.now()
-            db.session.commit()
 
     def actualizar_cuotas_pendientes(self):
         self.cuotas_pendientes = sum(1 for cuota in self.cuotas if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL])
-        db.session.commit()
 
     def __repr__(self):
         return f'<Prestamo {self.id_prestamo} - Cliente {self.id_cliente}>'
@@ -214,38 +213,38 @@ class Cuota(db.Model):
         """Calcula el interés diario (0.5% por día) desde la fecha de vencimiento"""
         if self.estado == EstadoCuota.PAGADA:
             return 0.0
-        
+
         fecha_actual = datetime.now()
         if fecha_actual <= self.fecha_vencimiento:
             return 0.0
-        
+
+        monto_base = self.monto_pendiente or self.monto
         dias_atraso = (fecha_actual - self.fecha_vencimiento).days
-        return self.monto_pendiente * 0.005 * dias_atraso  # 0.5% por día
+        return monto_base * 0.005 * dias_atraso
 
     def monto_total_pendiente(self):
         """Retorna el monto total pendiente incluyendo intereses"""
-        return self.monto_pendiente + self.calcular_interes_diario()
+        return (self.monto_pendiente or self.monto) + self.calcular_interes_diario()
 
     def registrar_pago_parcial(self, monto_pagado, es_ajuste_manual=False, nota_ajuste=None):
         """Registra un pago parcial en la cuota"""
         if self.estado == EstadoCuota.JUDICIAL:
             raise ValueError("No se pueden registrar pagos en cuotas en estado judicial")
-        
+
         self.monto_pagado += monto_pagado
         self.monto_pendiente = max(0, self.monto - self.monto_pagado)
-        
-        # Actualizar estado
+
         if self.monto_pendiente <= 0:
             self.estado = EstadoCuota.PAGADA
+            self.pagada = True
             self.fecha_pago = datetime.now()
-        
-        # Actualizar estado basado en montos
-        self.actualizar_estado()
-        
+        elif self.monto_pagado > 0:
+            self.estado = EstadoCuota.PAGO_PARCIAL
+            self.pagada = False
+
         if nota_ajuste:
             self.nota_ajuste = nota_ajuste
-        
-        # Actualizar cuotas pendientes del préstamo
+
         self.prestamo.actualizar_cuotas_pendientes()
 
     def registrar_pago(self, monto_pagado):
@@ -255,21 +254,20 @@ class Cuota(db.Model):
 
         self.monto_pagado = monto_pagado
         self.monto_pendiente = self.monto - monto_pagado
-        
+
         if monto_pagado >= self.monto:
             self.estado = EstadoCuota.PAGADA
+            self.pagada = True
             self.monto_pagado = self.monto
             self.monto_pendiente = 0
             self.fecha_pago = datetime.now()
         elif monto_pagado > 0:
             self.estado = EstadoCuota.PAGO_PARCIAL
+            self.pagada = False
             self.fecha_pago = datetime.now()
-        
-        # Verificar estado del préstamo
+
         self.prestamo.verificar_estado()
-        # Actualizar cuotas pendientes del préstamo
         self.prestamo.actualizar_cuotas_pendientes()
-        db.session.commit()
 
     def registrar_pago_con_trazabilidad(self, monto_pagado, interes_pagado=None, tipo_pago='parcial', nota=None, usuario_id=None):
         """Registra un pago con trazabilidad completa en la tabla de pagos"""
@@ -293,18 +291,19 @@ class Cuota(db.Model):
         # Actualizar la cuota
         self.monto_pagado += monto_pagado
         self.monto_pendiente = max(0, self.monto - self.monto_pagado)
-        
-        # Actualizar estado
+
         if self.monto_pendiente <= 0:
             self.estado = EstadoCuota.PAGADA
+            self.pagada = True
             self.fecha_pago = datetime.now()
         elif self.monto_pagado > 0:
             self.estado = EstadoCuota.PAGO_PARCIAL
+            self.pagada = False
             self.fecha_pago = datetime.now()
-        
-        # Actualizar cuotas pendientes del préstamo
+
         self.prestamo.actualizar_cuotas_pendientes()
-        
+        self.prestamo.verificar_estado()
+
         return pago
 
 class Pago(db.Model):

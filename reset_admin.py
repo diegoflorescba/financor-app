@@ -9,12 +9,12 @@ def reset_admin():
             
             # Crear nuevo usuario admin
             admin = User(
-                username='fedemartinez',
-                email='fedemartinez@gmail.com',
+                username='admin',
+                email='admin@gmail.com',
                 role='admin',
                 is_active=True
             )
-            admin.set_password('imogenes123')
+            admin.set_password('admin123')
             
             db.session.add(admin)
             db.session.commit()
