@@ -1,0 +1,148 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="card shadow-sm">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold text-gray-700">
+                <i class="fas fa-user me-2"></i>
+                Perfil de Usuario
+            </h2>
+        </div>
+        <div class="card-body p-4">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <!-- Avatar -->
+                    <div class="text-center mb-4">
+                        <div class="avatar-circle bg-gray-light mx-auto">
+                            <i class="fas fa-user text-gray-700"></i>
+                        </div>
+                    </div>
+
+                    <!-- User Info -->
+                    <div class="user-info">
+                        <div class="info-row">
+                            <span class="info-label">Usuario:</span>
+                            <span class="info-value">{{ user.username }}</span>
+                        </div>
+
+                        <div class="info-row">
+                            <span class="info-label">Email:</span>
+                            <span class="info-value">{{ user.email }}</span>
+                        </div>
+
+                        <div class="info-row">
+                            <span class="info-label">Rol:</span>
+                            <span class="info-value">
+                                <span
+                                    class="badge {% if user.role == 'admin' %}bg-purple-100 text-gray-700{% else %}bg-gray-light text-gray-700{% endif %}">
+                                    {{ user.role|title }}
+                                </span>
+                            </span>
+                        </div>
+
+                        <div class="info-row">
+                            <span class="info-label">Último inicio de sesión:</span>
+                            <span class="info-value">{{ user.last_login.strftime('%d/%m/%Y %H:%M') if user.last_login
+                                else 'Nunca' }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="mt-5 d-flex flex-column gap-3">
+                        <a href="{{ url_for('auth.change_password') }}" class="btn btn-gray btn-lg">
+                            <i class="fas fa-key me-2"></i>
+                            Cambiar Contraseña
+                        </a>
+                        <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-lg">
+                            <i class="fas fa-sign-out-alt me-2"></i>
+                            Cerrar Sesión
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .avatar-circle {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--color-gray-light);
+        margin-bottom: 1.5rem;
+    }
+
+    .user-info {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        font-weight: 600;
+        color: var(--color-gray);
+    }
+
+    .info-value {
+        color: var(--color-gray);
+    }
+
+    .badge {
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+    }
+
+    .bg-purple-100 {
+        background-color: var(--color-gray-light) !important;
+    }
+
+    .bg-gray-light {
+        background-color: var(--color-gray-light);
+    }
+
+    .text-gray-700 {
+        color: var(--color-gray) !important;
+    }
+
+    /* Button styles */
+    .btn-gray {
+        background-color: var(--color-gray);
+        border-color: var(--color-gray);
+        color: white;
+    }
+
+    .btn-gray:hover {
+        background-color: #4B5563;
+        border-color: #4B5563;
+        color: white;
+    }
+
+    .btn-outline-danger {
+        color: var(--color-danger);
+        border-color: var(--color-danger);
+    }
+
+    .btn-outline-danger:hover {
+        background-color: var(--color-danger);
+        border-color: var(--color-danger);
+        color: white;
+    }
+</style>
+{% endblock %}

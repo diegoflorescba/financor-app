@@ -1,22 +1,34 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2 class="mb-4">Listado de Préstamos por Cliente</h2>
+<!-- Title Section -->
+<div class="container mb-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold">
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Listado de Préstamos por Cliente
+            </h2>
+        </div>
+    </div>
+</div>
 
+<!-- Contenedor principal del acordeón -->
+<div class="loans-section">
     <div class="accordion" id="accordionPrestamos">
         {% for cliente in clientes %}
-        <div class="accordion-item">
+        <div class="accordion-item mb-3"
+            style="width:100vw; margin-left:calc(-50vw + 50%); margin-right:calc(-50vw + 50%); background-color:white; box-shadow:0 2px 4px rgba(0,0,0,0.1);">
             <!-- Cabecera del Cliente -->
             <h2 class="accordion-header" id="heading{{ cliente.id_cliente }}">
                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
                     data-bs-target="#collapse{{ cliente.id_cliente }}" aria-expanded="false"
                     aria-controls="collapse{{ cliente.id_cliente }}">
-                    <div class="row w-100">
-                        <div class="col-md-3">{{ cliente.nombre }} {{ cliente.apellido }}</div>
+                    <div class="row w-100 align-items-center">
+                        <div class="col-md-4">{{ cliente.apellido }}, {{ cliente.nombre }}</div>
                         <div class="col-md-3">DNI: {{ cliente.dni }}</div>
                         <div class="col-md-3">Tel: {{ cliente.telefono }}</div>
-                        <div class="col-md-3">Total Préstamos: {{ cliente.prestamos|length }}</div>
+                        <div class="col-md-2">Total Préstamos: {{ cliente.prestamos|length }}</div>
                     </div>
                 </button>
             </h2>
@@ -24,17 +36,17 @@
             <!-- Contenido de Préstamos -->
             <div id="collapse{{ cliente.id_cliente }}" class="accordion-collapse collapse"
                 aria-labelledby="heading{{ cliente.id_cliente }}" data-bs-parent="#accordionPrestamos">
-                <div class="accordion-body">
+                <div class="accordion-body p-0">
                     {% if cliente.prestamos %}
                     {% for prestamo in cliente.prestamos %}
-                    <div class="card mb-3">
-                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <div class="loan-card mb-3">
+                        <div class="loan-header bg-light d-flex justify-content-between align-items-center p-3">
                             <div>
                                 <strong>Préstamo #{{ prestamo.id_prestamo }}</strong> -
                                 Monto: ${{ "%.2f"|format(prestamo.monto_prestado) }} -
                                 Fecha: {{ prestamo.fecha_inicio.strftime('%d/%m/%Y') }}
                             </div>
-                            <div>
+                            <div class="loan-actions">
                                 <a href="{{ url_for('generar_contrato', prestamo_id=prestamo.id_prestamo) }}"
                                     class="btn btn-primary btn-sm">
                                     <i class="fas fa-file-contract"></i> Generar Contrato
@@ -43,55 +55,89 @@
                                     class="btn btn-info btn-sm ms-2">
                                     <i class="fas fa-file-signature"></i> Generar Pagaré
                                 </a>
+                                {% if current_user.is_admin %}
+                                <button onclick="marcarProcesoJudicial({{ prestamo.id_prestamo }})"
+                                    class="btn {% if prestamo.estado.name == 'JUDICIAL' %}btn-warning{% else %}btn-secondary{% endif %} btn-sm ms-2">
+                                    <i class="fas fa-gavel"></i> {% if prestamo.estado.name == 'JUDICIAL' %}Desmarcar
+                                    Judicial{% else %}Marcar Judicial{% endif %}
+                                </button>
+                                <button onclick="confirmarEliminarPrestamo({{ prestamo.id_prestamo }})"
+                                    class="btn btn-danger btn-sm ms-2">
+                                    <i class="fas fa-trash"></i> Eliminar Préstamo
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
-                        <div class="card-body">
+                        <div class="loan-body p-0">
                             {% if prestamo.cuotas %}
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Cuota #</th>
-                                        <th>Vencimiento</th>
-                                        <th>Monto</th>
-                                        <th>Estado</th>
-                                        <th>Acción</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for cuota in prestamo.cuotas %}
-                                    <tr>
-                                        <td>{{ cuota.numero_cuota }}</td>
-                                        <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
-                                        <td>${{ "%.2f"|format(cuota.monto) }}</td>
-                                        <td>
-                                            <span id="estado-cuota-{{ cuota.id_cuota }}"
-                                                class="badge {% if cuota.pagada %}bg-success{% else %}bg-danger{% endif %}">
-                                                {{ 'Pagada' if cuota.pagada else 'Pendiente' }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox"
-                                                    id="cuota-{{ cuota.id_cuota }}" {% if cuota.pagada %}checked{% endif
-                                                    %}
-                                                    onchange="actualizarEstadoCuota({{ cuota.id_cuota }}, this.checked)">
-                                                <label class="form-check-label" for="cuota-{{ cuota.id_cuota }}">
-                                                    Marcar como pagada
-                                                </label>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                            <div class="table-responsive">
+                                <table class="table table-striped mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Cuota #</th>
+                                            <th>Vencimiento</th>
+                                            <th>Monto</th>
+                                            <th>Estado</th>
+                                            <th>Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for cuota in prestamo.cuotas %}
+                                        <tr>
+                                            <td>{{ cuota.numero_cuota }}</td>
+                                            <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                                            <td>
+                                                {% if cuota.estado.name == 'PAGO_PARCIAL' %}
+                                                <span class="badge bg-info">Pago Parcial</span>
+                                                ${{ '%.2f' % cuota.monto_pagado }} / ${{ '%.2f' % cuota.monto }}
+                                                {% elif cuota.estado.name == 'PAGADA' %}
+                                                <span class="badge bg-success">Pagada</span>
+                                                ${{ '%.2f' % cuota.monto }}
+                                                {% elif cuota.estado.name == 'JUDICIAL' %}
+                                                <span class="badge bg-warning">Judicial</span>
+                                                ${{ '%.2f' % cuota.monto }}
+                                                {% else %}
+                                                <span class="badge bg-danger">Pendiente</span>
+                                                ${{ '%.2f' % cuota.monto }}
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <span id="estado-cuota-{{ cuota.id_cuota }}"
+                                                    class="badge {% if cuota.estado.name == 'PAGADA' %}bg-success{% else %}bg-danger{% endif %}">
+                                                    {{ cuota.estado.name }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div class="form-check">
+                                                    {% if current_user.is_admin %}
+                                                    <input class="form-check-input" type="checkbox"
+                                                        id="cuota-{{ cuota.id_cuota }}" {% if
+                                                        cuota.estado.name=='PAGADA' %}checked{% endif %}
+                                                        onchange="actualizarEstadoCuota({{ cuota.id_cuota }}, this.checked)">
+                                                    <label class="form-check-label" for="cuota-{{ cuota.id_cuota }}">
+                                                        Marcar como pagada
+                                                    </label>
+                                                    {% else %}
+                                                    <span
+                                                        class="badge {% if cuota.estado.name == 'PAGADA' %}bg-success{% else %}bg-danger{% endif %}">
+                                                        {{ cuota.estado.name }}
+                                                    </span>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
                             {% else %}
-                            <p class="text-muted">No hay cuotas registradas para este préstamo.</p>
+                            <p class="text-muted p-3">No hay cuotas registradas para este préstamo.</p>
                             {% endif %}
                         </div>
                     </div>
                     {% endfor %}
                     {% else %}
-                    <p class="text-muted">Este cliente no tiene préstamos registrados.</p>
+                    <p class="text-muted p-3">Este cliente no tiene préstamos registrados.</p>
                     {% endif %}
                 </div>
             </div>
@@ -102,12 +148,117 @@
     </div>
 </div>
 
+<style>
+    /* Estilos para la sección de préstamos */
+    .loans-section {
+        max-width: 98%;
+        margin: 0 auto 2rem;
+        padding: 0;
+    }
+
+    /* Estilos para el acordeón */
+    .accordion-item {
+        border: 1px solid rgba(0, 0, 0, .125);
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, .05);
+    }
+
+    .accordion-button {
+        background-color: #f8f9fa;
+        padding: 1.25rem;
+    }
+
+    .accordion-button:not(.collapsed) {
+        background-color: #e9ecef;
+        color: #1a1a1a;
+    }
+
+    /* Estilos para las tarjetas de préstamos */
+    .loan-card {
+        background-color: white;
+        border: 1px solid rgba(0, 0, 0, .125);
+        margin: 0.75rem 0.5rem;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .loan-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid rgba(0, 0, 0, .125);
+        padding: 1rem 1.25rem;
+    }
+
+    .loan-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    /* Estilos para la tabla */
+    .table-responsive {
+        margin: 0;
+        border: none;
+    }
+
+    .table {
+        margin: 0;
+        width: 100%;
+    }
+
+    .table th {
+        background-color: #f3f4f6;
+        border-bottom: 2px solid #e5e7eb;
+        font-weight: 600;
+        color: #374151;
+        padding: 1rem;
+        white-space: nowrap;
+    }
+
+    .table td {
+        padding: 0.75rem 1rem;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    /* Estilos para los badges */
+    .badge {
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+    }
+
+    /* Media queries */
+    @media (max-width: 768px) {
+        .loans-section {
+            max-width: 100%;
+            padding: 0 1rem;
+        }
+
+        .loan-actions {
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .loan-actions .btn {
+            width: 100%;
+            margin: 0 !important;
+        }
+
+        .table td {
+            white-space: normal;
+        }
+    }
+</style>
+
 <script>
     function actualizarEstadoCuota(idCuota, pagada) {
         fetch('/actualizar_estado_cuota', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
             },
             body: JSON.stringify({
                 id_cuota: idCuota,
@@ -117,29 +268,97 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Actualizar el estado visual
-                    const spanEstado = document.getElementById(`estado-cuota-${idCuota}`);
-                    if (pagada) {
-                        spanEstado.classList.remove('bg-danger');
-                        spanEstado.classList.add('bg-success');
-                        spanEstado.textContent = 'Pagada';
-                    } else {
-                        spanEstado.classList.remove('bg-success');
-                        spanEstado.classList.add('bg-danger');
-                        spanEstado.textContent = 'Pendiente';
-                    }
+                    const estadoElement = document.getElementById(`estado-cuota-${idCuota}`);
+                    estadoElement.textContent = pagada ? 'Pagada' : 'Pendiente';
+                    estadoElement.className = `badge ${pagada ? 'bg-success' : 'bg-danger'}`;
                 } else {
-                    // Si hay error, revertir el checkbox
-                    document.getElementById(`cuota-${idCuota}`).checked = !pagada;
                     alert('Error al actualizar el estado de la cuota');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                // Si hay error, revertir el checkbox
-                document.getElementById(`cuota-${idCuota}`).checked = !pagada;
                 alert('Error al actualizar el estado de la cuota');
             });
+    }
+
+    function marcarProcesoJudicial(idPrestamo) {
+        console.log('Marcando proceso judicial:', { idPrestamo });
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+        console.log('CSRF Token:', csrfToken ? 'Present' : 'Missing');
+
+        fetch('/marcar_proceso_judicial', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                id_prestamo: idPrestamo
+            })
+        })
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json().catch(error => {
+                    console.error('Error parsing JSON:', error);
+                    throw new Error('Invalid JSON response');
+                });
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                if (data.success) {
+                    // Recargar la página para mostrar los cambios
+                    location.reload();
+                } else {
+                    alert('Error al actualizar el estado judicial del préstamo: ' + (data.error || 'Error desconocido'));
+                }
+            })
+            .catch(error => {
+                console.error('Error in marcarProcesoJudicial:', error);
+                alert('Error al actualizar el estado judicial del préstamo: ' + error.message);
+            });
+    }
+
+    function confirmarEliminarPrestamo(idPrestamo) {
+        if (confirm('¿Está seguro que desea eliminar este préstamo? Esta acción no se puede deshacer.')) {
+            fetch(`/eliminar_prestamo/${idPrestamo}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Encontrar y eliminar la card del préstamo
+                        const prestamoCard = document.querySelector(`button[onclick="confirmarEliminarPrestamo(${idPrestamo})"]`)
+                            .closest('.loan-card');
+
+                        if (prestamoCard) {
+                            // Verificar si este es el último préstamo del cliente
+                            const accordionBody = prestamoCard.closest('.accordion-body');
+                            const prestamosRestantes = accordionBody.querySelectorAll('.loan-card').length;
+
+                            prestamoCard.remove();
+
+                            // Si era el último préstamo, mostrar mensaje
+                            if (prestamosRestantes === 1) {
+                                accordionBody.innerHTML = '<p class="text-muted p-3">Este cliente no tiene préstamos registrados.</p>';
+                            }
+                        }
+
+                        // Mostrar mensaje de éxito
+                        alert('Préstamo eliminado exitosamente');
+                    } else {
+                        alert(data.error || 'Error al eliminar el préstamo');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al eliminar el préstamo');
+                });
+        }
     }
 </script>
 {% endblock %}

@@ -1,14 +1,18 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="container mt-4">
-    <!-- Formulario de búsqueda -->
-    <div class="card shadow-sm mb-4">
+<!-- Formulario de búsqueda -->
+<div class="container mb-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold">
+                <i class="fas fa-search me-2"></i>
+                Consulta BCRA
+            </h2>
+        </div>
         <div class="card-body p-4">
-            <h3 class="mb-4 fs-4">
-                <i class="fas fa-search me-2"></i> Consulta BCRA
-            </h3>
             <form method="POST" action="{{ url_for('consultar_bcra') }}" class="row g-3 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="col-md-9">
                     <label for="identificacion" class="form-label fs-5">
                         <i class="fas fa-id-card"></i> Identificación (CUIT/CUIL/DNI)
@@ -24,18 +28,28 @@
             </form>
         </div>
     </div>
+</div>
 
-    {% if error %}
+{% if error %}
+<div class="container mb-4">
     <div class="alert alert-danger mt-4 shadow-sm" role="alert">
         <i class="fas fa-exclamation-triangle me-2"></i> {{ error }}
     </div>
-    {% endif %}
+</div>
+{% endif %}
 
-    {% if resultado %}
-    <!-- Resumen de Cheques -->
-    {% if resultado_cheques and resultado_cheques.detalles %}
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
+{% if resultado %}
+<!-- Resumen de Cheques -->
+{% if resultado_cheques and resultado_cheques.detalles %}
+<div class="container mb-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold">
+                <i class="fas fa-money-check me-2"></i>
+                Resumen de Cheques
+            </h2>
+        </div>
+        <div class="card-body p-4">
             <div class="row">
                 <div class="col-md-6">
                     <div class="financial-summary">
@@ -60,19 +74,24 @@
             </div>
         </div>
     </div>
-    {% endif %}
+</div>
+{% endif %}
 
-    <!-- Datos del Cliente -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <h3 class="fs-4 mb-4">
-                <i class="fas fa-user me-2"></i>Datos del Cliente
+<!-- Datos del Cliente -->
+<div class="container mb-4">
+    <div class="card shadow-sm">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold">
+                <i class="fas fa-user me-2"></i>
+                Datos del Cliente
                 <span class="badge bg-{{ resultado.clase }} ms-2">
                     <i
                         class="fas fa-{{ 'check-circle' if resultado.clase == 'success' else 'exclamation-triangle' }} me-1"></i>
                     {{ resultado.estado }}
                 </span>
-            </h3>
+            </h2>
+        </div>
+        <div class="card-body p-4">
             <div class="row g-3">
                 <div class="col-md-4">
                     <p class="mb-2 fw-bold">Nombre/Razón Social:</p>
@@ -89,142 +108,146 @@
             </div>
         </div>
     </div>
-
-    <!-- Tabla de entidades -->
-    <div class="mt-4">
-        <h6 class="mb-3">
-            <i class="fas fa-university me-2"></i>Detalle por Entidad
-        </h6>
-        <div class="table-responsive">
-            <table class="table table-hover table-striped align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th style="min-width: 200px">Entidad</th>
-                        <th style="min-width: 100px">Situación</th>
-                        <th style="min-width: 120px">Monto</th>
-                        <th style="min-width: 120px">Última Act.</th>
-                        <th style="min-width: 100px">Días Atraso</th>
-                        <th style="min-width: 120px">Refinanc.</th>
-                        <th style="min-width: 120px">Proc. Judicial</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for detalle in resultado.detalles %}
-                    <tr>
-                        <td>{{ detalle.entidad }}</td>
-                        <td>
-                            <span class="badge bg-{{ 'success' if detalle.situacion == 1 else 'warning' }}">
-                                {{ detalle.situacion }}
-                            </span>
-                        </td>
-                        <td>${{ detalle.monto|round(2) }}</td>
-                        <td>{{ detalle.fecha }}</td>
-                        <td>{{ detalle.diasAtraso }}</td>
-                        <td>{{ detalle.refinanciaciones }}</td>
-                        <td>{{ detalle.procesoJudicial }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    {% if resultado_historico and resultado_historico.periodos %}
-    <div class="card mt-4">
-        <div class="card-header bg-primary text-white py-3">
-            <h5 class="mb-0">
-                <i class="fas fa-history me-2"></i>
-                Historial de Deudas
-            </h5>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover table-striped align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Período</th>
-                            <th>Entidad</th>
-                            <th>Situación</th>
-                            <th>Monto</th>
-                            <th>Proceso Judicial</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for periodo in resultado_historico.periodos %}
-                        {% for entidad in periodo.entidades %}
-                        <tr>
-                            <td>
-                                {% set anio = periodo.periodo[:4] %}
-                                {% set mes = periodo.periodo[4:] %}
-                                {{ mes }}/{{ anio }}
-                            </td>
-                            <td>{{ entidad.entidad }}</td>
-                            <td>
-                                <span class="badge bg-{{ 'success' if entidad.situacion == 1 else 'warning' }}">
-                                    {{ entidad.situacion }}
-                                </span>
-                            </td>
-                            <td>${{ entidad.monto|round(2) }}</td>
-                            <td>{{ 'Sí' if entidad.procesoJud else 'No' }}</td>
-                        </tr>
-                        {% endfor %}
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    {% if resultado_cheques and resultado_cheques.detalles %}
-    <div class="card mt-4">
-        <div class="card-header bg-info text-white py-3">
-            <h5 class="mb-0 text-center">
-                <i class="fas fa-money-check me-2"></i>
-                Cheques Rechazados
-            </h5>
-        </div>
-
-        <div class="card-body">
-            <table class="table table-hover table-striped align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Entidad</th>
-                        <th>Causal</th>
-                        <th>N° Cheque</th>
-                        <th class="date-column">Fecha Rechazo</th>
-                        <th>Monto</th>
-                        <th class="date-column">Fecha Pago</th>
-                        <th>Estado Multa</th>
-                        <th>Proc. Judicial</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for detalle in resultado_cheques.detalles %}
-                    <tr>
-                        <td>{{ detalle.entidad }}</td>
-                        <td>{{ detalle.causal }}</td>
-                        <td>{{ detalle.nroCheque }}</td>
-                        <td class="date-column">{{ detalle.fechaRechazo }}</td>
-                        <td>${{ detalle.monto|round(2) }}</td>
-                        <td class="date-column">{{ detalle.fechaPago }}</td>
-                        <td>
-                            <span class="badge bg-{{ 'success' if detalle.estadoMulta == 'PAGADA' else 'warning' }}">
-                                {{ detalle.estadoMulta }}
-                            </span>
-                        </td>
-                        <td>{{ detalle.procesoJudicial }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
-    {% endif %}
 </div>
 
+<!-- Tabla de entidades -->
+<div class="table-section">
+    <div class="table-header bg-purple-100 text-dark py-3 px-4 mb-0">
+        <h2 class="mb-0 text-center fs-3 fw-bold">
+            <i class="fas fa-university me-2"></i>
+            Detalle por Entidad
+        </h2>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Entidad</th>
+                    <th>Situación</th>
+                    <th>Monto</th>
+                    <th>Última Act.</th>
+                    <th>Días Atraso</th>
+                    <th>Refinanc.</th>
+                    <th>Proc. Judicial</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for detalle in resultado.detalles %}
+                <tr>
+                    <td>{{ detalle.entidad }}</td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if detalle.situacion == 1 else 'warning' }}">
+                            {{ detalle.situacion }}
+                        </span>
+                    </td>
+                    <td>${{ detalle.monto|round(2) }}</td>
+                    <td>{{ detalle.fecha }}</td>
+                    <td>{{ detalle.diasAtraso }}</td>
+                    <td>{{ detalle.refinanciaciones }}</td>
+                    <td>{{ detalle.procesoJudicial }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if resultado_historico and resultado_historico.periodos %}
+<!-- Historial de Deudas -->
+<div class="table-section mt-4">
+    <div class="table-header bg-purple-100 text-dark py-3 px-4 mb-0">
+        <h2 class="mb-0 text-center fs-3 fw-bold">
+            <i class="fas fa-history me-2"></i>
+            Historial de Deudas
+        </h2>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Período</th>
+                    <th>Entidad</th>
+                    <th>Situación</th>
+                    <th>Monto</th>
+                    <th>Proceso Judicial</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for periodo in resultado_historico.periodos %}
+                {% for entidad in periodo.entidades %}
+                <tr>
+                    <td>
+                        {% set anio = periodo.periodo[:4] %}
+                        {% set mes = periodo.periodo[4:] %}
+                        {{ mes }}/{{ anio }}
+                    </td>
+                    <td>{{ entidad.entidad }}</td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if entidad.situacion == 1 else 'warning' }}">
+                            {{ entidad.situacion }}
+                        </span>
+                    </td>
+                    <td>${{ entidad.monto|round(2) }}</td>
+                    <td>{{ 'Sí' if entidad.procesoJud else 'No' }}</td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if resultado_cheques and resultado_cheques.detalles %}
+<!-- Cheques Rechazados -->
+<div class="table-section mt-4">
+    <div class="table-header bg-purple-100 text-dark py-3 px-4 mb-0">
+        <h2 class="mb-0 text-center fs-3 fw-bold">
+            <i class="fas fa-money-check me-2"></i>
+            Cheques Rechazados
+        </h2>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Entidad</th>
+                    <th>Causal</th>
+                    <th>N° Cheque</th>
+                    <th>Fecha Rechazo</th>
+                    <th>Monto</th>
+                    <th>Fecha Pago</th>
+                    <th>Estado Multa</th>
+                    <th>Proc. Judicial</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cheque in resultado_cheques.detalles %}
+                <tr>
+                    <td>{{ cheque.entidad }}</td>
+                    <td>{{ cheque.causal }}</td>
+                    <td>{{ cheque.nroCheque }}</td>
+                    <td>{{ cheque.fechaRechazo }}</td>
+                    <td>${{ cheque.monto|round(2) }}</td>
+                    <td>{{ cheque.fechaPago or '-' }}</td>
+                    <td>{{ cheque.estadoMulta }}</td>
+                    <td>{{ cheque.procesoJudicial }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
 <style>
+    /* Estilos para los contenedores principales */
+    .container {
+        padding: 1.5rem;
+    }
+
+    /* Estilos para el resumen financiero */
     .financial-summary {
         padding: 1.5rem;
         text-align: center;
@@ -234,43 +257,72 @@
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
-    .financial-summary h3 {
-        font-size: 1.2rem;
-        margin-bottom: 1rem;
-        color: #2c3e50;
-        font-weight: 600;
+    /* Estilos para las tablas */
+    .table-section {
+        min-width: 100vw;
+        margin-left: calc(-50vw + 50%);
+        margin-right: calc(-50vw + 50%);
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
-    .financial-summary p {
+    .table-header {
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .table-responsive {
         margin: 0;
-        font-weight: bold;
-        font-size: 1.8rem;
-        line-height: 1.2;
+        padding: 0;
+        border: none;
     }
 
-    .fs-4 {
-        font-size: 1.4rem !important;
+    .table {
+        margin: 0;
+        width: 100%;
     }
 
-    .fs-5 {
-        font-size: 1.1rem !important;
-    }
-
-    .card {
-        margin-bottom: 1.5rem;
-    }
-
-    .text-danger {
-        color: #dc3545 !important;
+    .table th {
+        background-color: #f3f4f6;
+        border-bottom: 2px solid #e5e7eb;
+        font-weight: 600;
+        color: #374151;
+        padding: 1rem;
+        white-space: nowrap;
     }
 
     .table td {
+        padding: 0.75rem 1rem;
         vertical-align: middle;
     }
 
+    .table tbody tr:hover {
+        background-color: #f9fafb;
+    }
+
+    /* Media queries para asegurar responsividad */
+    @media screen and (min-width: 1024px) {
+        .table-section {
+            min-width: 100vw;
+            margin-left: calc(-50vw + 50%);
+            margin-right: calc(-50vw + 50%);
+        }
+
+        .table-responsive {
+            overflow-x: visible;
+        }
+
+        .table {
+            width: 100%;
+            margin: 0 auto;
+            max-width: none;
+        }
+    }
+
+    /* Estilos para los badges */
     .badge {
-        font-size: 0.9em;
-        padding: 0.4em 0.6em;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
     }
 </style>
 {% endblock %}

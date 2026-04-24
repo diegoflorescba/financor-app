@@ -2,28 +2,34 @@
 
 {% block content %}
 <div class="container mt-5">
-    <div class="card shadow">
-        <div class="card-header bg-primary text-white">
-            <h2 class="mb-0 text-center">Nuevo Préstamo para {{ cliente.nombre }} {{ cliente.apellido }}</h2>
+    <div class="card shadow-sm">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold text-gray-700">
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Nuevo Préstamo para {{ cliente.nombre }} {{ cliente.apellido }}
+            </h2>
         </div>
         <div class="card-body p-4">
             <form id="prestamo-form" method="POST" action="{{ url_for('guardar_prestamo') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="id_cliente" value="{{ cliente.id_cliente }}">
 
                 <!-- Campos del formulario  -->
                 <div class="mb-5">
+                    <h4 class="border-bottom pb-2 mb-4 text-gray-700">Datos del Préstamo</h4>
+
                     <!-- Monto Prestado -->
                     <div class="form-group">
                         <label for="monto_prestado" class="form-label">Monto Prestado *</label>
                         <input type="number" id="monto_prestado" name="monto_prestado"
-                            class="form-control form-control-lg" required step="0.01">
+                            class="form-control form-control-lg" required>
                     </div>
 
                     <!-- Tasa de Interés -->
                     <div class="form-group">
                         <label for="tasa_interes" class="form-label">Tasa de Interés *</label>
                         <input type="number" id="tasa_interes" name="tasa_interes" class="form-control form-control-lg"
-                            required step="0.01">
+                            required>
                     </div>
 
                     <!-- Cantidad de Cuotas -->
@@ -37,14 +43,14 @@
                     <div class="form-group">
                         <label for="monto_cuotas" class="form-label">Monto por Cuota *</label>
                         <input type="number" id="monto_cuotas" name="monto_cuotas" class="form-control form-control-lg"
-                            required step="0.01">
+                            required>
                     </div>
 
                     <!-- Monto Total -->
                     <div class="form-group">
                         <label for="monto_adeudado" class="form-label">Monto Total</label>
-                        <input type="text" id="monto_adeudado" name="monto_adeudado"
-                            class="form-control form-control-lg" readonly>
+                        <input type="number" id="monto_adeudado" name="monto_adeudado"
+                            class="form-control form-control-lg bg-light" readonly>
                     </div>
 
                     <!-- Fecha de Inicio -->
@@ -54,7 +60,7 @@
                             required>
                     </div>
 
-                    <!-- Después de fecha_inicio y antes de fecha_finalizacion -->
+                    <!-- Fecha Primera Cuota -->
                     <div class="form-group">
                         <label for="fecha_vencimiento_primera_cuota" class="form-label">Fecha Vencimiento Primera Cuota
                             *</label>
@@ -64,16 +70,16 @@
 
                     <!-- Fecha de Finalizacion -->
                     <div class="form-group">
-                        <label for="fecha_finalizacion" class="form-label">Fecha de Finalizacion</label>
+                        <label for="fecha_finalizacion" class="form-label">Fecha de Finalización</label>
                         <input type="text" id="fecha_finalizacion" name="fecha_finalizacion"
-                            class="form-control form-control-lg" readonly>
+                            class="form-control form-control-lg bg-light" readonly>
                     </div>
                 </div>
 
-                <!-- Después de los datos del préstamo y antes de los botones, agregamos la sección del garante -->
-                <div class="card shadow mt-4 mb-4">
-                    <div class="card-header bg-primary text-white">
-                        <h4 class="mb-0">Datos del Garante (Opcional)</h4>
+                <!-- Sección del garante -->
+                <div class="card shadow-sm mt-4 mb-4">
+                    <div class="card-header bg-purple-100 text-dark py-3">
+                        <h4 class="mb-0 text-gray-700">Datos del Garante (Opcional)</h4>
                     </div>
                     <div class="card-body">
                         <div class="form-check mb-3">
@@ -85,11 +91,11 @@
                             <!-- DNI Garante con botón de búsqueda -->
                             <div class="form-group">
                                 <label for="dni_garante" class="form-label">DNI Garante *</label>
-                                <div class="d-flex align-items-center">
+                                <div class="d-flex align-items-center gap-2">
                                     <input type="text" id="dni_garante" name="dni_garante"
                                         class="form-control form-control-lg">
-                                    <button type="button" class="btn btn-primary ms-2" onclick="buscarGarante()">
-                                        <i class="fas fa-search"></i> Buscar
+                                    <button type="button" class="btn btn-gray" onclick="buscarGarante()">
+                                        <i class="fas fa-search me-2"></i>Buscar
                                     </button>
                                 </div>
                             </div>
@@ -134,11 +140,13 @@
 
                 <!-- Botones -->
                 <div class="mt-5">
-                    <button type="submit" class="btn btn-success btn-lg">
-                        <span class="px-5">Guardar Préstamo</span>
+                    <button type="submit" class="btn btn-gray btn-lg">
+                        <i class="fas fa-save me-2"></i>
+                        <span class="px-3">Guardar Préstamo</span>
                     </button>
-                    <button type="button" onclick="window.history.back()" class="btn btn-danger btn-lg ms-3">
-                        <span class="px-5">Cancelar</span>
+                    <button type="button" onclick="window.history.back()" class="btn btn-outline-danger btn-lg ms-3">
+                        <i class="fas fa-times me-2"></i>
+                        <span class="px-3">Cancelar</span>
                     </button>
                 </div>
             </form>
@@ -146,9 +154,9 @@
     </div>
 
     <!-- Vista Previa de Cuotas -->
-    <div class="card shadow mt-4">
-        <div class="card-header bg-primary text-white">
-            <h4 class="mb-0">Vista Previa de Cuotas</h4>
+    <div class="card shadow-sm mt-4">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h4 class="mb-0 text-gray-700">Vista Previa de Cuotas</h4>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -171,18 +179,35 @@
 </div>
 
 <style>
+    /* Variables de colores */
+    :root {
+        --color-primary: #6B7280;
+        --color-secondary: #4B5563;
+        --color-danger: #DC2626;
+        --color-gray: #4B5563;
+        --color-hover: #374151;
+        --color-bg: #f3f4f6;
+    }
+
     /* Estilos para los campos del formulario */
     .form-control-lg {
-        height: 50px;
-        font-size: 1.1rem;
-        margin-bottom: 1.5rem;
+        height: 45px;
+        font-size: 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid #E5E7EB;
+        border-radius: 0.5rem;
+    }
+
+    .form-control-lg:focus {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 0.2rem rgba(107, 114, 128, 0.25);
     }
 
     /* Contenedor para cada campo del formulario */
     .form-group {
         display: flex;
         align-items: center;
-        margin-bottom: 1.5rem;
+        margin-bottom: 1.25rem;
         max-width: 800px;
     }
 
@@ -190,41 +215,122 @@
     .form-label {
         width: 200px;
         margin-bottom: 0;
-        font-size: 1.1rem;
+        font-size: 1rem;
+        font-weight: 500;
+        color: var(--color-gray);
         padding-right: 1rem;
     }
 
     /* Estilo para los inputs */
     .form-group .form-control-lg {
-        width: 300px;
+        flex: 1;
+        max-width: 400px;
         margin-bottom: 0;
+    }
+
+    /* Ajustes para los checkboxes */
+    .form-check {
+        margin-left: 200px;
+        margin-bottom: 1.25rem;
+    }
+
+    .form-check-input {
+        width: 1.2em;
+        height: 1.2em;
+        margin-top: 0.25em;
+        border-color: var(--color-gray);
+    }
+
+    .form-check-input:checked {
+        background-color: var(--color-primary);
+        border-color: var(--color-primary);
+    }
+
+    /* Ajustes para la tabla */
+    .table {
+        margin-bottom: 0;
+    }
+
+    .table td,
+    .table th {
+        padding: 1rem;
+        vertical-align: middle;
+    }
+
+    .table thead th {
+        background-color: #f3f4f6;
+        border-bottom: 2px solid #e5e7eb;
+        color: var(--color-gray);
     }
 
     /* Para campos de solo lectura */
     .form-control-lg[readonly] {
-        background-color: #f8f9fa;
+        background-color: #F9FAFB;
+        border-color: #E5E7EB;
     }
 
-    /* Ajustes para la tabla */
-    .table td,
-    .table th {
-        padding: 1rem;
+    /* Estilos para las secciones */
+    .text-gray-700 {
+        color: var(--color-gray) !important;
     }
 
-    .is-invalid {
-        border-color: #dc3545 !important;
+    .bg-purple-100 {
+        background-color: var(--color-bg) !important;
     }
 
-    #datos_garante .form-group {
-        margin-bottom: 1rem;
+    /* Estilos para los botones */
+    .btn-gray {
+        background-color: var(--color-primary);
+        border-color: var(--color-primary);
+        color: white;
     }
 
-    .form-check {
-        padding-left: 1.5rem;
+    .btn-gray:hover {
+        background-color: var(--color-hover);
+        border-color: var(--color-hover);
+        color: white;
     }
 
-    .form-check-input {
-        margin-left: -1.5rem;
+    .btn-outline-danger {
+        color: var(--color-danger);
+        border-color: var(--color-danger);
+    }
+
+    .btn-outline-danger:hover {
+        background-color: var(--color-danger);
+        border-color: var(--color-danger);
+        color: white;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .form-group {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .form-label {
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group .form-control-lg {
+            width: 100%;
+            max-width: none;
+        }
+
+        .form-check {
+            margin-left: 0;
+        }
+
+        .d-flex.align-items-center.gap-2 {
+            flex-direction: column;
+            gap: 0.5rem !important;
+        }
+
+        .d-flex.align-items-center.gap-2 .btn {
+            width: 100%;
+        }
     }
 </style>
 
@@ -241,11 +347,16 @@
 
     function calcularMontos() {
         const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
-        const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+        const montoCuota = parseInt(document.getElementById('monto_cuotas').value) || 0;
+        const montoAdeudadoInput = document.getElementById('monto_adeudado');
 
         if (cuotasTotales && montoCuota) {
             const montoTotal = cuotasTotales * montoCuota;
-            document.getElementById('monto_adeudado').value = montoTotal.toFixed(2);
+            montoAdeudadoInput.value = montoTotal;
+            // Disparar un evento change para asegurar que otros listeners se enteren
+            montoAdeudadoInput.dispatchEvent(new Event('change'));
+        } else {
+            montoAdeudadoInput.value = '';
         }
     }
 
@@ -301,7 +412,7 @@
     function generarCuotas() {
         const fechaPrimeraCuota = document.getElementById('fecha_vencimiento_primera_cuota').value;
         const cuotasTotales = parseInt(document.getElementById('cuotas_totales').value) || 0;
-        const montoCuota = parseFloat(document.getElementById('monto_cuotas').value) || 0;
+        const montoCuota = parseInt(document.getElementById('monto_cuotas').value) || 0;
         const tbody = document.getElementById('cuotas-body');
         const fechaHoy = new Date();
 
@@ -336,7 +447,7 @@
             row.innerHTML = `
                 <td>${i + 1}</td>
                 <td>${formatearFecha(fechaISO)}</td>
-                <td>$${montoCuota.toFixed(2)}</td>
+                <td>$${montoCuota}</td>
                 <td class="${estadoClass}"><strong>${estado}</strong></td>
             `;
             tbody.appendChild(row);

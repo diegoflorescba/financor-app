@@ -1,8 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, session
 from datetime import datetime, date, timedelta
 from calendar import monthrange
 from dateutil.relativedelta import relativedelta
-from models import db, Cliente, Prestamo, Cuota, Garante
+from models import db, Cliente, Prestamo, Cuota, Garante, User, AuditLog, EstadoPrestamo, EstadoCuota, Pago
 import os
 import pandas as pd
 import io
@@ -14,9 +14,61 @@ import json
 import traceback
 from docx import Document
 from docx.shared import Pt
+from flask_login import LoginManager, login_required, current_user, login_user, logout_user
+from auth import admin_required, user_required, audit_change, get_changes
+from flask_wtf.csrf import CSRFProtect
+from auth_routes import auth
+from functools import wraps
+import zipfile
 
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+
+# Configuración de la base de datos
+db_path = os.path.join(os.path.dirname(__file__), 'instance', 'prestamos.db')
+db_dir = os.path.dirname(db_path)
+os.makedirs(db_dir, exist_ok=True)
+os.chmod(db_dir, 0o777)  # Dar permisos de lectura/escritura al directorio
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Configuración de sesión
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # Reducido a 30 minutos
+app.config['SESSION_COOKIE_SECURE'] = True  # Solo HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(minutes=30)  # Duración del "recordarme"
+app.config['REMEMBER_COOKIE_REFRESH_EACH_REQUEST'] = True  # Refrescar la cookie en cada request
+
+# Initialize SQLAlchemy
+db.init_app(app)
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
+# Register auth blueprint with url_prefix
+app.register_blueprint(auth, url_prefix='/auth')
+
+# Configuración de Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'  # Ruta para el login
+login_manager.login_message = 'Por favor inicie sesión para acceder a esta página.'
+login_manager.login_message_category = 'warning'
+login_manager.session_protection = 'strong'  # Añadir protección de sesión fuerte
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+@app.context_processor
+def utility_processor():
+    def is_admin():
+        return current_user.is_authenticated and current_user.is_admin
+    return dict(is_admin=is_admin)
 
 # Suprimir advertencias de SSL inseguro
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -40,7 +92,6 @@ db.init_app(app)
 # Crear las tablas si no existen
 with app.app_context():
     db.create_all()
-    print("Base de datos inicializada correctamente")
 
 # Configuración de la API BCRA
 BCRA_API_URL = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{}"
@@ -51,18 +102,28 @@ def format_money(amount):
     return "{:,.2f}".format(amount).replace(",", "X").replace(".", ",").replace("X", ".")
 
 @app.route('/')
+def root():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    return redirect(url_for('auth.login'))
+
 @app.route('/index')
+@login_required
 def index():
+    if not current_user.is_authenticated:
+        return redirect(url_for('auth.login'))
     return render_template('index.html', active_page='inicio')
 
 
 @app.route('/clientes')
+@user_required
 def clientes():
     clientes_list = Cliente.query.order_by(Cliente.apellido).all()
     return render_template('clientes.html', clientes=clientes_list, active_page='clientes')
 
 
 @app.route('/cliente/nuevo', methods=['GET', 'POST'])
+@login_required
 def nuevo_cliente():
     if request.method == 'POST':
         try:
@@ -75,9 +136,13 @@ def nuevo_cliente():
                 direccion=request.form.get('direccion', ''),
                 documentacion_verificada=bool(request.form.get('documentacion_verificada')),
                 fecha_registro=datetime.now(),
-                activo=bool(request.form.get('activo', True))
+                activo=bool(request.form.get('activo', True)),
+                created_by=current_user.id
             )
             db.session.add(nuevo_cliente)
+            db.session.flush()
+            
+            audit_change('create', 'cliente', nuevo_cliente.id_cliente)
             db.session.commit()
             flash('Cliente registrado exitosamente', 'success')
             return redirect(url_for('clientes'))
@@ -138,7 +203,7 @@ def registro():
                     monto_adeudado=monto_total,
                     fecha_inicio=fecha_inicio,
                     fecha_finalizacion=fecha_primera_cuota + relativedelta(months=cuotas_totales-1),
-                    estado='ACTIVO'
+                    estado=EstadoPrestamo.ACTIVO
                 )
 
                 db.session.add(nuevo_prestamo)
@@ -168,8 +233,9 @@ def registro():
                         fecha_vencimiento=fecha_vencimiento,
                         monto=monto_cuota,
                         monto_pagado=monto_cuota if esta_pagada else 0.0,
+                        monto_pendiente=0.0 if esta_pagada else monto_cuota,
                         pagada=esta_pagada,
-                        estado='PAGADA' if esta_pagada else 'PENDIENTE',
+                        estado=EstadoCuota.PAGADA if esta_pagada else EstadoCuota.PENDIENTE,
                         fecha_pago=datetime.now() if esta_pagada else None
                     )
                     
@@ -185,7 +251,7 @@ def registro():
 
                 # Si todas las cuotas están pagadas, marcar el préstamo como finalizado
                 if cuotas_pagadas == cuotas_totales:
-                    nuevo_prestamo.estado = 'FINALIZADO'
+                    nuevo_prestamo.estado = EstadoPrestamo.FINALIZADO
                     nuevo_prestamo.fecha_finalizacion = datetime.now()
 
                 # Procesar garante si está incluido
@@ -223,6 +289,7 @@ def registro():
 
 
 @app.route('/reportes')
+@user_required
 def reportes():
     # Configurar el locale en español
     locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
@@ -237,80 +304,68 @@ def reportes():
     
     # Obtener todos los préstamos activos
     prestamos = Prestamo.query.filter(
-        Prestamo.estado == 'ACTIVO',
+        Prestamo.estado == EstadoPrestamo.ACTIVO,
         Prestamo.monto_adeudado > 0
     ).all()
     
-    # Modificar el cálculo del total adeudado para solo incluir cuotas pendientes
-    total_adeudado = db.session.query(
-        func.sum(Cuota.monto - Cuota.monto_pagado)
-    ).join(
-        Prestamo, Cuota.id_prestamo == Prestamo.id_prestamo
-    ).filter(
-        Cuota.estado == 'PENDIENTE',
-        Prestamo.estado == 'ACTIVO'
-    ).scalar() or 0
-    
-    # Calcular el adeudado del mes actual
-    adeudado_mes_actual = db.session.query(db.func.sum(Cuota.monto))\
-        .join(Prestamo)\
-        .filter(
-            Prestamo.estado == 'ACTIVO',
-            Cuota.pagada == False,
-            db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
-            db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
-        ).scalar() or 0.0
-    
-    # Calcular el adeudado del mes siguiente
-    adeudado_mes_siguiente = db.session.query(db.func.sum(Cuota.monto))\
-        .join(Prestamo)\
-        .filter(
-            Prestamo.estado == 'ACTIVO',
-            Cuota.pagada == False,
-            db.extract('month', Cuota.fecha_vencimiento) == fecha_siguiente.month,
-            db.extract('year', Cuota.fecha_vencimiento) == fecha_siguiente.year
-        ).scalar() or 0.0
+    # Calcular el total adeudado como suma de monto_adeudado de los préstamos activos
+    total_adeudado = sum(p.monto_adeudado for p in prestamos)
 
-    # Obtener cuotas para la tabla
+    # Obtener cuotas para la tabla (siempre incluir mes actual y siguiente)
     query = Cuota.query.join(Prestamo).join(Cliente).filter(
-        Prestamo.estado == 'ACTIVO',
-        Cuota.pagada == False
-    )
-
-    # Si estamos después del día 10, incluir cuotas del mes siguiente
-    if fecha_actual.day > 10:
-        query = query.filter(
-            db.or_(
-                db.and_(
-                    db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
-                    db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
-                ),
-                db.and_(
-                    db.extract('month', Cuota.fecha_vencimiento) == fecha_siguiente.month,
-                    db.extract('year', Cuota.fecha_vencimiento) == fecha_siguiente.year
-                )
+        Prestamo.estado == EstadoPrestamo.ACTIVO,
+        Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]),
+        db.or_(
+            db.and_(
+                db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
+                db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
+            ),
+            db.and_(
+                db.extract('month', Cuota.fecha_vencimiento) == fecha_siguiente.month,
+                db.extract('year', Cuota.fecha_vencimiento) == fecha_siguiente.year
             )
         )
-    else:
-        query = query.filter(
-            db.extract('month', Cuota.fecha_vencimiento) == fecha_actual.month,
-            db.extract('year', Cuota.fecha_vencimiento) == fecha_actual.year
-        )
+    )
 
     cuotas = query.order_by(Cliente.apellido, Cliente.nombre, Cuota.fecha_vencimiento).all()
-    
+
+    # Calcular los totales a partir de las cuotas que se muestran en la tabla
+    adeudado_mes_actual = sum(
+        (c.monto_pendiente or 0) for c in cuotas
+        if c.fecha_vencimiento.month == fecha_actual.month and c.fecha_vencimiento.year == fecha_actual.year
+    )
+    adeudado_mes_siguiente = sum(
+        (c.monto_pendiente or 0) for c in cuotas
+        if c.fecha_vencimiento.month == fecha_siguiente.month and c.fecha_vencimiento.year == fecha_siguiente.year
+    )
+
+    # Calcular total de proceso judicial usando el monto pendiente de las cuotas judiciales
+    prestamos_judiciales = Prestamo.query.filter(
+        Prestamo.estado == EstadoPrestamo.JUDICIAL
+    ).all()
+
+    total_proceso_judicial = 0
+    for prestamo in prestamos_judiciales:
+        total_proceso_judicial += sum(
+            (c.monto_pendiente or c.monto) for c in prestamo.cuotas if c.estado == EstadoCuota.JUDICIAL
+        )
+
     return render_template('reportes.html',
                          prestamos=prestamos,
                          cuotas=cuotas,
                          mes_actual=mes_actual,
                          mes_siguiente=mes_siguiente,
+                         fecha_actual=fecha_actual,
+                         fecha_siguiente=fecha_siguiente,
                          total_adeudado=total_adeudado,
                          adeudado_mes_actual=adeudado_mes_actual,
                          adeudado_mes_siguiente=adeudado_mes_siguiente,
+                         total_proceso_judicial=total_proceso_judicial,
                          active_page='reportes')
 
 
 @app.route('/cuotas_a_vencer')
+@user_required
 def cuotas_a_vencer():
     # Configurar el locale en español
     locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
@@ -319,35 +374,37 @@ def cuotas_a_vencer():
     # Capitalizar la primera letra del mes
     mes_actual = today.strftime('%B %Y').capitalize()
     
-    # Filtrar cuotas:
-    # - Del mes actual
-    # - Que venzan antes del día 10
-    # - Que no estén pagadas
+    from calendar import monthrange
+    ultimo_dia = monthrange(today.year, today.month)[1]
     cuotas = Cuota.query.join(Prestamo).join(Cliente).filter(
         Cuota.fecha_vencimiento.between(
             datetime(today.year, today.month, 1),
-            datetime(today.year, today.month, 10)
+            datetime(today.year, today.month, ultimo_dia, 23, 59, 59)
         ),
-        Cuota.pagada == False
+        Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]),
+        Prestamo.estado != EstadoPrestamo.JUDICIAL
     ).order_by(Cuota.fecha_vencimiento).all()
 
-    # Calcular el total a cobrar
-    total_a_cobrar = sum(cuota.monto for cuota in cuotas)
+    # Calcular el total a cobrar usando monto pendiente
+    total_a_cobrar = sum((cuota.monto_pendiente or cuota.monto) for cuota in cuotas)
 
     return render_template('cuotas_a_vencer.html',
                          cuotas=cuotas,
                          total_a_cobrar=total_a_cobrar,
                          today=today,
-                         mes_actual=mes_actual)
+                         mes_actual=mes_actual,
+                         active_page='cuotas_a_vencer')
 
 
 @app.route('/cliente/<int:id>')
+@user_required
 def ver_cliente(id):
     cliente = Cliente.query.get_or_404(id)
-    return render_template('cliente_detalle.html', cliente=cliente)
+    return render_template('cliente_detalle.html', cliente=cliente, active_page='clientes')
 
 
 @app.route('/cliente/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
 def editar_cliente(id):
     cliente = Cliente.query.get_or_404(id)
     
@@ -359,6 +416,7 @@ def editar_cliente(id):
             cliente.telefono = request.form['telefono']
             cliente.correo_electronico = request.form['correo_electronico']
             cliente.direccion = request.form['direccion']
+            cliente.updated_by = current_user.id
             
             db.session.commit()
             flash('Cliente actualizado exitosamente', 'success')
@@ -388,8 +446,8 @@ def exportar_excel():
         cuotas = Cuota.query.join(Prestamo).join(Cliente).filter(
             Cuota.fecha_vencimiento >= primer_dia_mes,
             Cuota.fecha_vencimiento <= ultimo_dia_mes,
-            Cuota.pagada == False,
-            Prestamo.estado == 'ACTIVO'
+            Cuota.estado.in_([EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]),
+            Prestamo.estado == EstadoPrestamo.ACTIVO
         ).order_by(Cliente.apellido, Cliente.nombre, Cuota.fecha_vencimiento).all()
 
         # Crear DataFrame
@@ -436,65 +494,74 @@ def exportar_excel():
 def money_format(value):
     try:
         return f"${format_money(value)}"
-    except:
-        return f"${value:.2f}"
+    except Exception:
+        try:
+            return f"${value:.2f}"
+        except Exception:
+            return f"${value}"
 
 
 @app.route('/pagar_cuota/<int:cuota_id>', methods=['POST'])
+@login_required
+@admin_required
 def pagar_cuota(cuota_id):
     try:
-        with db.session.begin_nested():  # Crear un savepoint
-            # Obtener la cuota
-            cuota = Cuota.query.get_or_404(cuota_id)
+        cuota = Cuota.query.get_or_404(cuota_id)
+        if cuota.estado == EstadoCuota.PAGADA:
+            flash('Esta cuota ya está pagada', 'warning')
+            return redirect(url_for('cuotas_a_vencer'))
+        if cuota.estado == EstadoCuota.JUDICIAL:
+            flash('No se puede pagar una cuota en estado judicial.', 'error')
+            return redirect(url_for('cuotas_a_vencer'))
+        monto_pendiente = cuota.monto_pendiente or 0
+        if monto_pendiente <= 0:
+            flash('El monto pendiente de la cuota no es válido.', 'error')
+            return redirect(url_for('cuotas_a_vencer'))
 
-            # Verificar que la cuota no esté pagada
-            if cuota.pagada:
-                flash('Esta cuota ya está pagada', 'warning')
-                return redirect(url_for('cuotas_a_vencer'))
-
-            # Marcar la cuota como pagada
-            cuota.pagada = True
-            cuota.fecha_pago = datetime.now()
-            cuota.monto_pagado = cuota.monto
-            cuota.estado = 'PAGADA'
-
-            # Actualizar el préstamo
-            prestamo = cuota.prestamo
-            prestamo.cuotas_pendientes -= 1
-            prestamo.monto_adeudado -= cuota.monto
-
-            # Si es la última cuota, actualizar estado del préstamo
-            if prestamo.cuotas_pendientes == 0:
-                prestamo.estado = 'FINALIZADO'
-                prestamo.fecha_finalizacion = datetime.now()
-
-            db.session.commit()
-            flash('Cuota pagada exitosamente', 'success')
-
+        pago = cuota.registrar_pago_con_trazabilidad(
+            monto_pagado=monto_pendiente,
+            interes_pagado=None,
+            tipo_pago='total',
+            nota='Pago total de cuota',
+            usuario_id=current_user.id
+        )
+        prestamo = cuota.prestamo
+        prestamo.monto_adeudado = sum((c.monto_pendiente or 0) for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
+        db.session.commit()
+        flash('Cuota pagada exitosamente', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al procesar el pago: {str(e)}', 'error')
-
+        app.logger.error(f'Error al procesar el pago de cuota: {str(e)}', exc_info=True)
+        flash('Ocurrió un error inesperado al procesar el pago. Intente nuevamente o contacte al administrador.', 'error')
+        return redirect(url_for('cuotas_a_vencer'))
     return redirect(url_for('cuotas_a_vencer'))
 
 
 @app.route('/crear_cliente', methods=['POST'])
+@login_required
 def crear_cliente():
+    from re import match
     try:
-        nuevo_cliente = Cliente(
-            nombre=request.form['nombre'],
-            apellido=request.form['apellido'],
-            dni=request.form['dni'],
-            telefono=request.form.get('telefono', ''),
-            direccion=request.form.get('direccion', ''),
-            correo_electronico=request.form.get('correo_electronico', '')
-        )
+        nombre = request.form['nombre'].strip()
+        apellido = request.form['apellido'].strip()
+        dni = request.form['dni'].strip()
+        correo = request.form.get('correo_electronico', '').strip()
+        telefono = request.form.get('telefono', '').strip()
+        direccion = request.form.get('direccion', '').strip()
+
+        # Validaciones de campos requeridos
+        if not nombre or not apellido or not dni:
+            flash('Nombre, apellido y DNI son obligatorios.', 'error')
+            return redirect(url_for('clientes'))
+        if correo and not match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", correo):
+            flash('El correo electrónico no tiene un formato válido.', 'error')
+            return redirect(url_for('clientes'))
 
         # Verificar si ya existe un cliente con el mismo DNI o correo
         cliente_existente = Cliente.query.filter(
             db.or_(
-                Cliente.dni == nuevo_cliente.dni,
-                Cliente.correo_electronico == nuevo_cliente.correo_electronico
+                Cliente.dni == dni,
+                Cliente.correo_electronico == correo
             )
         ).first()
 
@@ -502,41 +569,79 @@ def crear_cliente():
             flash('Ya existe un cliente con ese DNI o correo electrónico', 'error')
             return redirect(url_for('clientes'))
 
-        db.session.add(nuevo_cliente)
-        db.session.commit()
+        with db.session.begin():
+            nuevo_cliente = Cliente(
+                nombre=nombre,
+                apellido=apellido,
+                dni=dni,
+                telefono=telefono,
+                direccion=direccion,
+                correo_electronico=correo
+            )
+            db.session.add(nuevo_cliente)
         flash('Cliente creado exitosamente', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al crear el cliente: {str(e)}', 'error')
+        app.logger.error(f'Error al crear el cliente: {str(e)}', exc_info=True)
+        flash('Ocurrió un error inesperado al crear el cliente. Intente nuevamente o contacte al administrador.', 'error')
     return redirect(url_for('clientes'))
 
 
 @app.route('/prestamos')
+@user_required
 def prestamos():
-    # Modificar la consulta para ordenar por id_prestamo
     clientes = Cliente.query.options(
         db.joinedload(Cliente.prestamos).joinedload(Prestamo.cuotas)
-    ).join(Cliente.prestamos).order_by(Prestamo.id_prestamo).all()
-    
+    ).all()
     return render_template('prestamos.html', clientes=clientes, active_page='prestamos')
 
 
 @app.route('/crear_prestamo', methods=['POST'])
+@login_required
+@admin_required
 def crear_prestamo():
     try:
         # Obtener datos del formulario
-        id_cliente = int(request.form['id_cliente'])
-        monto_prestado = float(request.form['monto'])
-        tasa_interes = float(request.form['tasa_interes'])
-        cuotas_totales = int(request.form['cuotas'])
-        
+        id_cliente = request.form.get('id_cliente')
+        monto_prestado = request.form.get('monto')
+        tasa_interes = request.form.get('tasa_interes')
+        cuotas_totales = request.form.get('cuotas')
+
+        # Validaciones de campos requeridos y positivos
+        if not id_cliente or not monto_prestado or not tasa_interes or not cuotas_totales:
+            flash('Todos los campos son obligatorios.', 'error')
+            return redirect(url_for('prestamos'))
+        try:
+            cuotas_totales_int = int(cuotas_totales)
+            if cuotas_totales_int <= 0:
+                flash('El número de cuotas debe ser mayor a 0.', 'error')
+                return redirect(url_for('prestamos'))
+        except ValueError:
+            flash('El número de cuotas debe ser un número entero válido.', 'error')
+            return redirect(url_for('prestamos'))
+        try:
+            id_cliente = int(id_cliente)
+            monto_prestado = float(monto_prestado)
+            tasa_interes = float(tasa_interes)
+            cuotas_totales = int(cuotas_totales)
+        except ValueError:
+            flash('Los valores de monto, interés y cuotas deben ser numéricos.', 'error')
+            return redirect(url_for('prestamos'))
+        if monto_prestado <= 0 or tasa_interes < 0 or cuotas_totales <= 0:
+            flash('El monto, las cuotas y la tasa de interés deben ser valores positivos.', 'error')
+            return redirect(url_for('prestamos'))
+
+        # Validar que el cliente exista
+        cliente = Cliente.query.get(id_cliente)
+        if not cliente:
+            flash('El cliente seleccionado no existe.', 'error')
+            return redirect(url_for('prestamos'))
+
         # Verificar si hay garante
         tiene_garante = 'tiene_garante' in request.form and request.form['tiene_garante'] == 'on'
         id_garante = None
-
         if tiene_garante:
             try:
-                # Crear o buscar garante solo si se marcó la opción
                 dni_garante = request.form.get('dni_garante')
                 if dni_garante:
                     garante = Garante.query.filter_by(dni=dni_garante).first()
@@ -555,7 +660,7 @@ def crear_prestamo():
                         db.session.flush()
                     id_garante = garante.id_garante
             except Exception as e:
-                print(f"Error al procesar garante: {str(e)}")
+                app.logger.error(f'Error al procesar garante: {str(e)}', exc_info=True)
                 id_garante = None
 
         # Convertir la fecha de inicio del string a objeto datetime
@@ -572,88 +677,71 @@ def crear_prestamo():
         monto_total = monto_prestado * (1 + tasa_interes/100)
         monto_cuota = round(monto_total / cuotas_totales, 2)
 
-        # Crear el préstamo primero y asegurarse de que se guarde
-        nuevo_prestamo = Prestamo(
-            id_cliente=id_cliente,
-            id_garante=id_garante,  # Puede ser None
-            monto_prestado=monto_prestado,
-            tasa_interes=tasa_interes,
-            cuotas_totales=cuotas_totales,
-            cuotas_pendientes=cuotas_totales,
-            monto_cuotas=monto_cuota,
-            monto_adeudado=monto_total,
-            fecha_inicio=fecha_inicio,
-            fecha_finalizacion=primer_vencimiento + relativedelta(months=cuotas_totales-1),
-            estado='ACTIVO'
-        )
-
-        db.session.add(nuevo_prestamo)
-        db.session.flush()  # Asegurarse de que el préstamo tenga ID antes de crear las cuotas
-
-        # Verificar que el préstamo tiene ID
-        if not nuevo_prestamo.id_prestamo:
-            raise ValueError("Error al generar ID del préstamo")
-
-        # Usar la fecha de primera cuota del formulario
-        fecha_primera_cuota = datetime.strptime(request.form['fecha_primera_cuota'], '%Y-%m-%d')
-        dia_vencimiento = fecha_primera_cuota.day
-        
-        # Crear las cuotas
-        hoy = datetime.now().date()
-        cuotas_pagadas = 0
-        monto_pagado = 0
-
-        for i in range(nuevo_prestamo.cuotas_totales):
-            # Calcular fecha de vencimiento manteniendo el mismo día
-            if i == 0:
-                fecha_vencimiento = fecha_primera_cuota
-            else:
-                # Usar relativedelta para mantener el mismo día del mes
-                fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
-                # Asegurar que se mantenga el día de vencimiento
-                fecha_vencimiento = fecha_vencimiento.replace(day=dia_vencimiento)
-            
-            # Verificar si la cuota ya venció
-            esta_pagada = fecha_vencimiento.date() < hoy
-            
-            nueva_cuota = Cuota(
-                id_prestamo=nuevo_prestamo.id_prestamo,
-                numero_cuota=i + 1,
-                fecha_vencimiento=fecha_vencimiento,
-                monto=nuevo_prestamo.monto_cuotas,
-                monto_pagado=nuevo_prestamo.monto_cuotas if esta_pagada else 0.0,
-                pagada=esta_pagada,
-                estado='PAGADA' if esta_pagada else 'PENDIENTE',
-                fecha_pago=datetime.now() if esta_pagada else None
+        with db.session.begin():
+            # Crear el préstamo primero y asegurarse de que se guarde
+            nuevo_prestamo = Prestamo(
+                id_cliente=id_cliente,
+                id_garante=id_garante,  # Puede ser None
+                monto_prestado=monto_prestado,
+                tasa_interes=tasa_interes,
+                cuotas_totales=cuotas_totales,
+                cuotas_pendientes=cuotas_totales,
+                monto_cuotas=monto_cuota,
+                monto_adeudado=monto_total,
+                fecha_inicio=fecha_inicio,
+                fecha_finalizacion=primer_vencimiento + relativedelta(months=cuotas_totales-1),
+                estado=EstadoPrestamo.ACTIVO
             )
-            
-            if esta_pagada:
-                cuotas_pagadas += 1
-                monto_pagado += nuevo_prestamo.monto_cuotas
-            
-            db.session.add(nueva_cuota)
+            db.session.add(nuevo_prestamo)
+            db.session.flush()  # Asegurarse de que el préstamo tenga ID antes de crear las cuotas
 
-        # Actualizar el préstamo con las cuotas pagadas
-        nuevo_prestamo.cuotas_pendientes = nuevo_prestamo.cuotas_totales - cuotas_pagadas
-        nuevo_prestamo.monto_adeudado = nuevo_prestamo.monto_adeudado - monto_pagado
+            if not nuevo_prestamo.id_prestamo:
+                raise ValueError("Error al generar ID del préstamo")
 
-        # Si todas las cuotas están pagadas, marcar el préstamo como finalizado
-        if cuotas_pagadas == nuevo_prestamo.cuotas_totales:
-            nuevo_prestamo.estado = 'FINALIZADO'
-            nuevo_prestamo.fecha_finalizacion = datetime.now()
+            fecha_primera_cuota = datetime.strptime(request.form['fecha_primera_cuota'], '%Y-%m-%d')
+            dia_vencimiento = fecha_primera_cuota.day
+            hoy = datetime.now().date()
+            cuotas_pagadas = 0
+            monto_pagado = 0
 
-        db.session.commit()
+            for i in range(nuevo_prestamo.cuotas_totales):
+                if i == 0:
+                    fecha_vencimiento = fecha_primera_cuota
+                else:
+                    fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
+                    fecha_vencimiento = fecha_vencimiento.replace(day=dia_vencimiento)
+                esta_pagada = fecha_vencimiento.date() < hoy
+                nueva_cuota = Cuota(
+                    id_prestamo=nuevo_prestamo.id_prestamo,
+                    numero_cuota=i + 1,
+                    fecha_vencimiento=fecha_vencimiento,
+                    monto=nuevo_prestamo.monto_cuotas,
+                    monto_pagado=nuevo_prestamo.monto_cuotas if esta_pagada else 0.0,
+                    monto_pendiente=0.0 if esta_pagada else nuevo_prestamo.monto_cuotas,
+                    pagada=esta_pagada,
+                    estado=EstadoCuota.PAGADA if esta_pagada else EstadoCuota.PENDIENTE,
+                    fecha_pago=datetime.now() if esta_pagada else None
+                )
+                if esta_pagada:
+                    cuotas_pagadas += 1
+                    monto_pagado += nuevo_prestamo.monto_cuotas
+                db.session.add(nueva_cuota)
+            nuevo_prestamo.cuotas_pendientes = nuevo_prestamo.cuotas_totales - cuotas_pagadas
+            nuevo_prestamo.monto_adeudado = nuevo_prestamo.monto_adeudado - monto_pagado
+            if cuotas_pagadas == nuevo_prestamo.cuotas_totales:
+                nuevo_prestamo.estado = EstadoPrestamo.FINALIZADO
+                nuevo_prestamo.fecha_finalizacion = datetime.now()
         flash('Préstamo creado exitosamente', 'success')
-
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al crear el préstamo: {str(e)}', 'error')
-        print(f"Error detallado: {str(e)}")  # Para debugging
-
-    return redirect(url_for('prestamos'))
+        app.logger.error(f'Error al crear el préstamo: {str(e)}', exc_info=True)
+        flash('Ocurrió un error inesperado al crear el préstamo. Intente nuevamente o contacte al administrador.', 'error')
+        return redirect(url_for('prestamos'))
 
 
 @app.route('/debug_db')
+@login_required
+@admin_required
 def debug_db():
     with app.app_context():
         cuotas = Cuota.query.all()
@@ -673,40 +761,9 @@ def debug_db():
         return f"<pre>{debug_info}</pre>"
 
 
-@app.route('/reset_prestamos')
-def reset_prestamos():
-    with app.app_context():
-        try:
-            # Eliminar todas las cuotas
-            Cuota.query.delete()
-            # Eliminar todos los préstamos
-            Prestamo.query.delete()
-            db.session.commit()
-            return "Préstamos y cuotas eliminados correctamente"
-        except Exception as e:
-            db.session.rollback()
-            return f"Error: {str(e)}"
-
-
-@app.route('/debug_prestamo/<int:prestamo_id>')
-def debug_prestamo(prestamo_id):
-    prestamo = Prestamo.query.get_or_404(prestamo_id)
-    cuotas = Cuota.query.filter_by(id_prestamo=prestamo_id).all()
-
-    debug_info = f"""
-    Préstamo ID: {prestamo.id_prestamo}
-    Monto: ${prestamo.monto_prestado}
-    Cuotas totales: {prestamo.cuotas_totales}
-    Estado: {prestamo.estado}
-    
-    Cuotas:
-    {[f'ID: {c.id_cuota}, Número: {c.numero_cuota}, Vence: {c.fecha_vencimiento}, Pagada: {c.pagada}' for c in cuotas]}
-    """
-
-    return f"<pre>{debug_info}</pre>"
-
-
 @app.route('/recrear_cuotas/<int:prestamo_id>')
+@login_required
+@admin_required
 def recrear_cuotas(prestamo_id):
     try:
         prestamo = Prestamo.query.get_or_404(prestamo_id)
@@ -718,11 +775,11 @@ def recrear_cuotas(prestamo_id):
         fecha_base = prestamo.fecha_inicio or datetime.now()
         for i in range(prestamo.cuotas_totales):
             mes_actual = fecha_base.month + i
-            año_actual = fecha_base.year + ((mes_actual - 1) // 12)
+            ano_actual = fecha_base.year + ((mes_actual - 1) // 12)
             mes_actual = ((mes_actual - 1) % 12) + 1
 
             fecha_vencimiento = fecha_base.replace(
-                year=año_actual, month=mes_actual)
+                year=ano_actual, month=mes_actual)
 
             nueva_cuota = Cuota(
                 numero_cuota=i + 1,
@@ -770,6 +827,7 @@ def ver_cuotas(prestamo_id):
 
 
 @app.route('/consultar_bcra', methods=['GET', 'POST'])
+@user_required
 def consultar_bcra():
     resultado = None
     resultado_cheques = None
@@ -954,10 +1012,12 @@ def prestamos_otorgados():
 
 
 @app.route('/buscar_clientes')
+@user_required
 def buscar_clientes():
-    return render_template('buscar_clientes.html', active_page='cargar_prestamos')
+    return render_template('buscar_clientes.html', active_page='clientes')
 
 @app.route('/api/buscar_clientes')
+@user_required
 def api_buscar_clientes():
     query = request.args.get('query', '').strip()
     tipo_busqueda = request.args.get('tipo', 'todos')
@@ -1003,13 +1063,20 @@ def api_buscar_clientes():
         return jsonify({'error': f'Error al buscar clientes: {str(e)}'}), 500
     
 @app.route('/cargar_prestamo/<int:id_cliente>')
+@login_required
 def cargar_prestamo(id_cliente):
     cliente = Cliente.query.get_or_404(id_cliente)
-    return render_template('cargar_prestamo.html', cliente=cliente)
+    return render_template('cargar_prestamo.html', cliente=cliente, active_page='prestamos')
 
 @app.route('/guardar_prestamo', methods=['POST'])
+@login_required
 def guardar_prestamo():
     try:
+        # Log de los datos recibidos
+        app.logger.info("Datos del formulario recibidos:")
+        for key, value in request.form.items():
+            app.logger.info(f"{key}: {value}")
+
         # Obtener datos del formulario
         id_cliente = request.form['id_cliente']
         monto_prestado = float(request.form['monto_prestado'])
@@ -1020,7 +1087,18 @@ def guardar_prestamo():
         fecha_inicio = datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d')
         fecha_vencimiento_primera_cuota = datetime.strptime(request.form['fecha_vencimiento_primera_cuota'], '%Y-%m-%d')
 
+        app.logger.info("Datos convertidos:")
+        app.logger.info(f"id_cliente: {id_cliente}")
+        app.logger.info(f"monto_prestado: {monto_prestado}")
+        app.logger.info(f"tasa_interes: {tasa_interes}")
+        app.logger.info(f"cuotas_totales: {cuotas_totales}")
+        app.logger.info(f"monto_cuotas: {monto_cuotas}")
+        app.logger.info(f"monto_adeudado: {monto_adeudado}")
+        app.logger.info(f"fecha_inicio: {fecha_inicio}")
+        app.logger.info(f"fecha_vencimiento_primera_cuota: {fecha_vencimiento_primera_cuota}")
+
         # Crear el préstamo
+        app.logger.info("Creando nuevo préstamo...")
         nuevo_prestamo = Prestamo(
             id_cliente=id_cliente,
             monto_prestado=monto_prestado,
@@ -1031,53 +1109,60 @@ def guardar_prestamo():
             monto_adeudado=monto_adeudado,
             fecha_inicio=fecha_inicio,
             fecha_finalizacion=None,
-            estado='ACTIVO'
+            estado=EstadoPrestamo.ACTIVO
         )
         
+        app.logger.info("Agregando préstamo a la sesión...")
         db.session.add(nuevo_prestamo)
+        app.logger.info("Haciendo flush para obtener id_prestamo...")
         db.session.flush()  # Para obtener el id_prestamo
 
+        app.logger.info(f"Préstamo creado con ID: {nuevo_prestamo.id_prestamo}")
+
         # Crear las cuotas usando la fecha de vencimiento de la primera cuota
-        fecha_actual = datetime.now().date()
         fecha_primera_cuota = fecha_vencimiento_primera_cuota.date()
         
-        cuotas_pagadas = 0
-        monto_pagado = 0
+        app.logger.info("Creando cuotas...")
+        cuotas_creadas = []  # Lista para almacenar las cuotas creadas
         
         for i in range(cuotas_totales):
             fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
             
-            # Determinar si la cuota ya está vencida
-            esta_pagada = fecha_vencimiento < fecha_actual
-            
+            app.logger.info(f"Creando cuota {i+1} con fecha {fecha_vencimiento}")
             cuota = Cuota(
                 id_prestamo=nuevo_prestamo.id_prestamo,
                 numero_cuota=i + 1,
                 monto=monto_cuotas,
                 fecha_vencimiento=fecha_vencimiento,
-                estado='PAGADA' if esta_pagada else 'PENDIENTE',
-                monto_pagado=monto_cuotas if esta_pagada else 0,
-                pagada=esta_pagada,
-                fecha_pago=datetime.now() if esta_pagada else None
+                monto_pagado=0,  # Siempre 0 al crear
+                monto_pendiente=monto_cuotas,  # Siempre el monto total al crear
+                fecha_pago=None  # Siempre None al crear
             )
-            
-            if esta_pagada:
-                cuotas_pagadas += 1
-                monto_pagado += monto_cuotas
+            cuota.actualizar_estado(pagada=False)  # Esto actualizará tanto pagada como estado
             
             db.session.add(cuota)
+            cuotas_creadas.append(cuota)
 
-        # Actualizar el préstamo con las cuotas pagadas
-        nuevo_prestamo.cuotas_pendientes = cuotas_totales - cuotas_pagadas
-        nuevo_prestamo.monto_adeudado = monto_adeudado - monto_pagado
+        app.logger.info(f"Creadas {len(cuotas_creadas)} cuotas")
+
+        # Actualizar el préstamo con las cuotas pendientes
+        nuevo_prestamo.cuotas_pendientes = cuotas_totales  # Todas las cuotas están pendientes
+        nuevo_prestamo.monto_adeudado = monto_adeudado  # El monto adeudado es el total
+
+        # Variable para almacenar el garante si se crea uno nuevo
+        nuevo_garante = None
 
         # Procesar garante si está incluido
+        app.logger.info("Verificando si hay garante...")
         if 'tiene_garante' in request.form:
+            app.logger.info("Tiene garante marcado, procesando datos del garante...")
             # Verificar si ya existe un garante con ese DNI
             dni_garante = request.form['dni_garante']
+            app.logger.info(f"Buscando garante con DNI: {dni_garante}")
             garante = Garante.query.filter_by(dni=dni_garante).first()
 
             if not garante:
+                app.logger.info("Garante no existe, creando nuevo garante...")
                 # Crear nuevo garante
                 garante = Garante(
                     nombre=request.form['nombre_garante'],
@@ -1091,59 +1176,84 @@ def guardar_prestamo():
                 )
                 db.session.add(garante)
                 db.session.flush()  # Para obtener el id_garante
+                nuevo_garante = garante  # Guardar referencia al nuevo garante
+                app.logger.info(f"Nuevo garante creado con ID: {garante.id_garante}")
 
             id_garante = garante.id_garante
-
-            # Actualizar el préstamo con el nuevo garante
             nuevo_prestamo.id_garante = id_garante
+            app.logger.info(f"Préstamo asociado con garante ID: {id_garante}")
 
+        app.logger.info("Haciendo commit de los cambios...")
+        # Hacer commit de todos los cambios
         db.session.commit()
+
+        app.logger.info("Registrando en el log de auditoría...")
+        # Registrar la creación del préstamo en el log de auditoría
+        prestamo_data = {
+            'monto_prestado': monto_prestado,
+            'tasa_interes': tasa_interes,
+            'cuotas_totales': cuotas_totales,
+            'monto_cuotas': monto_cuotas,
+            'monto_adeudado': monto_adeudado,
+            'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
+            'fecha_vencimiento_primera_cuota': fecha_vencimiento_primera_cuota.strftime('%Y-%m-%d')
+        }
+        audit_change('create', 'prestamo', nuevo_prestamo.id_prestamo, changes=prestamo_data)
+
+        # Registrar la creación de cada cuota en el log de auditoría
+        for cuota in cuotas_creadas:
+            cuota_data = {
+                'numero_cuota': cuota.numero_cuota,
+                'monto': cuota.monto,
+                'fecha_vencimiento': cuota.fecha_vencimiento.strftime('%Y-%m-%d'),
+                'estado': cuota.estado.name if cuota.estado else None,  # Usar el nombre del estado
+                'monto_pagado': cuota.monto_pagado,
+                'pagada': cuota.pagada if hasattr(cuota, 'pagada') else False,
+                'fecha_pago': cuota.fecha_pago.strftime('%Y-%m-%d') if cuota.fecha_pago else None
+            }
+            audit_change('create', 'cuota', cuota.id_cuota, changes=cuota_data)
+
+        # Registrar la creación del garante en el log de auditoría si se creó uno nuevo
+        if nuevo_garante:
+            app.logger.info("Registrando nuevo garante en el log de auditoría...")
+            garante_data = {
+                'nombre': nuevo_garante.nombre,
+                'apellido': nuevo_garante.apellido,
+                'dni': nuevo_garante.dni,
+                'telefono': nuevo_garante.telefono,
+                'correo_electronico': nuevo_garante.correo_electronico,
+                'direccion': nuevo_garante.direccion
+            }
+            audit_change('create', 'garante', nuevo_garante.id_garante, changes=garante_data)
+
+        app.logger.info("Préstamo y cuotas creados exitosamente")
         flash('Préstamo guardado exitosamente', 'success')
         return redirect(url_for('prestamos'))
-
     except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Error al guardar el préstamo: {str(e)}", exc_info=True)
         flash(f'Error al guardar el préstamo: {str(e)}', 'error')
         return redirect(url_for('prestamos'))
 
 
 @app.route('/eliminar_cliente/<int:id>', methods=['POST'])
+@login_required
+@admin_required
 def eliminar_cliente(id):
-    app.logger.info(f'Iniciando eliminación del cliente {id}')
-    
     try:
         cliente = Cliente.query.get_or_404(id)
-        app.logger.info(f'Cliente encontrado: {cliente.nombre} {cliente.apellido}')
-        
-        # Obtener y contar préstamos
-        prestamos = Prestamo.query.filter_by(id_cliente=id).all()
-        app.logger.info(f'Préstamos encontrados: {len(prestamos)}')
-        
-        # Para cada préstamo, eliminar sus cuotas
-        for prestamo in prestamos:
-            cuotas = Cuota.query.filter_by(id_prestamo=prestamo.id_prestamo).all()
-            app.logger.info(f'Cuotas encontradas para préstamo {prestamo.id_prestamo}: {len(cuotas)}')
-            Cuota.query.filter_by(id_prestamo=prestamo.id_prestamo).delete()
-        
-        # Eliminar préstamos
-        Prestamo.query.filter_by(id_cliente=id).delete()
-        
-        # Eliminar cliente
         db.session.delete(cliente)
         db.session.commit()
-        
-        app.logger.info('Eliminación completada exitosamente')
-        flash(f'Cliente {cliente.nombre} {cliente.apellido} y todos sus datos relacionados han sido eliminados correctamente', 'success')
-        
+        flash('Cliente eliminado exitosamente', 'success')
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f'Error durante la eliminación: {str(e)}')
         flash(f'Error al eliminar el cliente: {str(e)}', 'error')
-        
     return redirect(url_for('clientes'))
 
 
 @app.route('/debug_schema')
+@login_required
+@admin_required
 def debug_schema():
     try:
         inspector = inspect(db.engine)
@@ -1204,30 +1314,6 @@ def debug_schema():
         return html
     except Exception as e:
         return f'Error al inspeccionar la base de datos: {str(e)}'
-    
-@app.route('/cleanup_db')
-def cleanup_db():
-    try:
-        with db.engine.connect() as conn:
-            # Desactivar temporalmente las restricciones de clave foránea
-            conn.execute(text("PRAGMA foreign_keys = OFF"))
-
-            # Eliminar en orden correcto (primero las tablas hijas)
-            conn.execute(text("DELETE FROM cuota"))
-            conn.execute(text("DELETE FROM prestamo"))
-            conn.execute(text("DELETE FROM cliente"))
-            conn.execute(text("DELETE FROM garante"))
-            
-            # Reactivar las restricciones de clave foránea
-            conn.execute(text("PRAGMA foreign_keys = ON"))
-            
-            # Confirmar los cambios
-            conn.commit()
-            
-            return "Limpieza de base de datos completada exitosamente"
-            
-    except Exception as e:
-        return f"Error limpiando la base de datos: {str(e)}"
 
 def init_db():
     """Función para inicializar/verificar la base de datos"""
@@ -1257,26 +1343,61 @@ def init_db():
             print("Base de datos inicializada exitosamente!")
 
 @app.route('/actualizar_estado_cuota', methods=['POST'])
+@login_required
+@admin_required
 def actualizar_estado_cuota():
     try:
         data = request.get_json()
         id_cuota = data.get('id_cuota')
         pagada = data.get('pagada')
 
-        # Cambiar query.get() por db.session.get()
         cuota = db.session.get(Cuota, id_cuota)
-        
-        if cuota:
-            cuota.pagada = pagada
-            cuota.estado = 'PAGADA' if pagada else 'PENDIENTE'
-            db.session.commit()
-            return jsonify({'success': True})
-        return jsonify({'success': False, 'error': 'Cuota no encontrada'})
+        if not cuota:
+            return jsonify({'success': False, 'error': 'Cuota no encontrada'})
+
+        prestamo = cuota.prestamo
+
+        if pagada:
+            cuota.estado = EstadoCuota.PAGADA
+            cuota.pagada = True
+            cuota.monto_pagado = cuota.monto
+            cuota.monto_pendiente = 0.0
+            cuota.fecha_pago = datetime.now()
+        else:
+            cuota.estado = EstadoCuota.PENDIENTE
+            cuota.pagada = False
+            cuota.monto_pagado = 0.0
+            cuota.monto_pendiente = cuota.monto
+            cuota.fecha_pago = None
+
+        prestamo.cuotas_pendientes = sum(
+            1 for c in prestamo.cuotas
+            if c.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]
+        )
+        prestamo.monto_adeudado = sum(
+            (c.monto_pendiente or 0) for c in prestamo.cuotas
+            if c.estado != EstadoCuota.PAGADA
+        )
+
+        if prestamo.cuotas_pendientes == 0 and prestamo.estado != EstadoPrestamo.JUDICIAL:
+            prestamo.estado = EstadoPrestamo.FINALIZADO
+            prestamo.fecha_finalizacion = datetime.now()
+        elif prestamo.cuotas_pendientes > 0 and prestamo.estado == EstadoPrestamo.FINALIZADO:
+            prestamo.estado = EstadoPrestamo.ACTIVO
+            prestamo.fecha_finalizacion = None
+
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'cuotas_pendientes': prestamo.cuotas_pendientes,
+            'monto_adeudado': prestamo.monto_adeudado
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/buscar_garante/<dni>')
+@user_required
 def buscar_garante(dni):
     garante = Garante.query.filter_by(dni=dni).first()
     
@@ -1297,20 +1418,29 @@ def buscar_garante(dni):
         })
 
 @app.route('/admin')
+@login_required
+@admin_required
 def admin():
     # Obtener todos los datos de cada tabla
     clientes = Cliente.query.all()
     prestamos = Prestamo.query.all()
     cuotas = Cuota.query.all()
     garantes = Garante.query.all()
+    users = User.query.all()
+    pagos = Pago.query.all()
 
     return render_template('admin.html', 
                          clientes=clientes,
                          prestamos=prestamos,
                          cuotas=cuotas,
-                         garantes=garantes)
+                         garantes=garantes,
+                         users=users,
+                         pagos=pagos,
+                         active_page='admin')
 
 @app.route('/test_bcra/<cuit>')
+@login_required
+@admin_required
 def test_bcra(cuit):
     try:
         # Construir la URL con el CUIT
@@ -1336,6 +1466,8 @@ def test_bcra(cuit):
         return f'Error: {str(e)}\n\nStack trace:\n{traceback.format_exc()}'
 
 @app.route('/actualizar_fechas_prestamo/<int:id_prestamo>', methods=['GET', 'POST'])
+@login_required
+@admin_required
 def actualizar_fechas_prestamo(id_prestamo):
     prestamo = Prestamo.query.get_or_404(id_prestamo)
     
@@ -1359,17 +1491,16 @@ def actualizar_fechas_prestamo(id_prestamo):
             cuota.fecha_vencimiento = nueva_fecha
             
             # Establecer todas las cuotas como PENDIENTES
-            cuota.estado = 'PENDIENTE'
-            cuota.pagada = False
+            cuota.estado = EstadoCuota.PENDIENTE
             cuota.monto_pagado = 0
+            cuota.monto_pendiente = cuota.monto
             cuota.fecha_pago = None
         
         # Actualizar la fecha de finalización del préstamo
         prestamo.fecha_finalizacion = nueva_fecha_primera_cuota + relativedelta(months=len(cuotas)-1)
         
-        # Actualizar el préstamo
-        prestamo.cuotas_pendientes = len(cuotas)  # Todas las cuotas pendientes
-        prestamo.monto_adeudado = sum(cuota.monto for cuota in cuotas)  # Todo el monto pendiente
+        prestamo.cuotas_pendientes = len(cuotas)
+        prestamo.monto_adeudado = sum(cuota.monto_pendiente or cuota.monto for cuota in cuotas)
         
         db.session.commit()
         flash('Fechas del préstamo actualizadas correctamente', 'success')
@@ -1404,49 +1535,106 @@ def generar_contrato(prestamo_id):
         # Cargar el template
         doc = Document('templates/template_mutuo.docx')
         
+        # Fecha de firma del mutuo (día y mes para rellenar en el docx)
+        fecha_firma_mutuo = datetime.now()
+        dia_mutuo = str(fecha_firma_mutuo.day)
+        mes_letra_mutuo = fecha_firma_mutuo.strftime('%B').capitalize()
+        
         # Crear diccionario con todos los reemplazos
         replacements = {
-            '{fecha_actual}': datetime.now().strftime('%d/%m/%Y'),
+            '{fecha_actual}': fecha_firma_mutuo.strftime('%d/%m/%Y'),
+            '{dia_mutuo}': dia_mutuo,
+            '{mes_letra_mutuo}': mes_letra_mutuo,
             '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
             '{dni}': cliente.dni,
             '{domicilio}': cliente.direccion or '',
+            '{telefono}': cliente.telefono or '',
             '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
             '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado),
             '{cantidad_cuotas}': str(prestamo.cuotas_totales),
+            '{cantidad_cuotas_letras}': numero_a_letras(prestamo.cuotas_totales),
             '{monto_cuota}': f"${format_money(prestamo.monto_cuotas)}",
             '{monto_cuota_letras}': numero_a_letras(prestamo.monto_cuotas),
-            '{fecha_primera_cuota}': prestamo.cuotas[0].fecha_vencimiento.strftime('%d/%m/%Y'),
+            '{fecha_primera_cuota}': prestamo.cuotas[0].fecha_vencimiento.strftime('%d/%m/%Y') if prestamo.cuotas else '',
         }
         
+        # Siempre definir placeholders del garante (con datos o vacío si no hay garante)
         if garante:
             replacements.update({
                 '{nombre_apellido_garante}': f"{garante.nombre} {garante.apellido}",
-                '{dni_garante}': garante.dni,
+                '{dni_garante}': garante.dni or '',
                 '{domicilio_garante}': garante.direccion or '',
+                '{telefono_garante}': garante.telefono or ''
             })
-        
-        # Reemplazar en el documento
-        for paragraph in doc.paragraphs:
+        else:
+            replacements.update({
+                '{nombre_apellido_garante}': '',
+                '{dni_garante}': '',
+                '{domicilio_garante}': '',
+                '{telefono_garante}': ''
+            })
+
+        def reemplazar_en_parrafo(paragraph):
             for key, value in replacements.items():
                 if key in paragraph.text:
                     paragraph.text = paragraph.text.replace(key, value)
-        
-        # Guardar temporalmente
-        temp_path = f'prestamos_app/temp/contrato_prestamo_{prestamo_id}.docx'
-        os.makedirs('prestamos_app/temp', exist_ok=True)
+
+        def reemplazar_en_tabla(table):
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        reemplazar_en_parrafo(paragraph)
+
+        # Reemplazar en párrafos del cuerpo
+        for paragraph in doc.paragraphs:
+            reemplazar_en_parrafo(paragraph)
+        # Reemplazar en tablas del cuerpo
+        for table in doc.tables:
+            reemplazar_en_tabla(table)
+        # Reemplazar en encabezados y pies de cada sección
+        for section in doc.sections:
+            for paragraph in section.header.paragraphs:
+                reemplazar_en_parrafo(paragraph)
+            for table in section.header.tables:
+                reemplazar_en_tabla(table)
+            for paragraph in section.footer.paragraphs:
+                reemplazar_en_parrafo(paragraph)
+            for table in section.footer.tables:
+                reemplazar_en_tabla(table)
+
+        temp_path = f'temp/contrato_prestamo_{prestamo_id}.docx'
+        os.makedirs('temp', exist_ok=True)
         doc.save(temp_path)
-        
-        # Enviar archivo
-        return send_file(
+
+        response = send_file(
             temp_path,
             as_attachment=True,
             download_name=f'Contrato_Prestamo_{cliente.apellido}_{prestamo_id}.docx'
         )
+
+        @response.call_on_close
+        def cleanup():
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+        return response
         
     except Exception as e:
         print(f"Error detallado: {str(e)}")  # Para debugging
         flash(f'Error al generar el contrato: {str(e)}', 'error')
         return redirect(url_for('prestamos'))
+
+def obtener_primer_dia_habil(fecha):
+    # Obtener el primer día del mes
+    primer_dia = fecha.replace(day=1)
+    
+    # Si es sábado (5) o domingo (6), avanzar al lunes
+    while primer_dia.weekday() >= 5:  # 5 es sábado, 6 es domingo
+        primer_dia = primer_dia + timedelta(days=1)
+    
+    return primer_dia
 
 @app.route('/generar_pagare/<int:prestamo_id>')
 def generar_pagare(prestamo_id):
@@ -1468,38 +1656,91 @@ def generar_pagare(prestamo_id):
         prestamo = Prestamo.query.get_or_404(prestamo_id)
         cliente = prestamo.cliente
         
-        # Cargar el template
-        doc = Document('templates/template_pagare.docx')
+        # Obtener todas las cuotas ordenadas por número
+        cuotas = Cuota.query.filter_by(id_prestamo=prestamo_id).order_by(Cuota.numero_cuota).all()
         
-        # Crear diccionario con los reemplazos necesarios
-        replacements = {
-            '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
-            '{domicilio}': cliente.direccion or '',
-            '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
-            '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado)
-        }
+        # Crear directorio temporal si no existe
+        os.makedirs('temp', exist_ok=True)
         
-        # Reemplazar en el documento
-        for paragraph in doc.paragraphs:
-            for key, value in replacements.items():
-                if key in paragraph.text:
-                    paragraph.text = paragraph.text.replace(key, value)
+        # Lista para almacenar los paths de los archivos generados
+        archivos_generados = []
         
-        # Guardar temporalmente
-        temp_path = f'prestamos_app/temp/pagare_prestamo_{prestamo_id}.docx'
-        os.makedirs('prestamos_app/temp', exist_ok=True)
-        doc.save(temp_path)
+        # Generar un pagaré por cada cuota
+        for cuota in cuotas:
+            # Cargar el template
+            doc = Document('templates/template_pagare.docx')
+            
+            # Calcular la fecha del primer día hábil del mes de vencimiento
+            fecha_firma = obtener_primer_dia_habil(cuota.fecha_vencimiento)
+            # Vencimiento del pagaré: día 5 del mes correlativo (N1 → 5 del mes de la cuota 1, N2 → 5 del mes de la cuota 2, etc.)
+            try:
+                locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+            except locale.Error:
+                pass
+            vencimiento_pagare = date(
+                cuota.fecha_vencimiento.year,
+                cuota.fecha_vencimiento.month,
+                5
+            )
+            dia_vencimiento_pagare = '5'
+            mes_vencimiento_pagare = vencimiento_pagare.strftime('%B').capitalize()
+            ano_vencimiento_pagare = str(vencimiento_pagare.year)
+
+            # Crear diccionario con los reemplazos necesarios
+            replacements = {
+                '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
+                '{domicilio}': cliente.direccion or '',
+                '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
+                '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado),
+                '{cuota_mensual_letras}': numero_a_letras(cuota.monto),
+                '{mes_firma_pagare}': fecha_firma.strftime('%B').capitalize(),
+                '{dia_firma_pagare}': str(fecha_firma.day),
+                '{ano_pagare}': str(fecha_firma.year),
+                '{cuota_mensual_numeros}': f"${format_money(cuota.monto)}",
+                '{numero_pagare}': str(cuota.numero_cuota),
+                '{vencimiento_pagare}': cuota.fecha_vencimiento.strftime('%d/%m/%Y'),
+                '{dia_vencimiento_pagare}': dia_vencimiento_pagare,
+                '{mes_vencimiento_pagare}': mes_vencimiento_pagare,
+                '{año_vencimiento_pagare}': ano_vencimiento_pagare,
+                '{ano_vencimiento_pagare}': ano_vencimiento_pagare,
+            }
+            
+            # Reemplazar en párrafos
+            for paragraph in doc.paragraphs:
+                for key, value in replacements.items():
+                    if key in paragraph.text:
+                        paragraph.text = paragraph.text.replace(key, value)
+            # Reemplazar en celdas de tablas
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for key, value in replacements.items():
+                            if key in cell.text:
+                                for paragraph in cell.paragraphs:
+                                    if key in paragraph.text:
+                                        paragraph.text = paragraph.text.replace(key, value)
+            
+            # Guardar temporalmente
+            temp_path = f'temp/pagare_prestamo_{prestamo_id}_cuota_{cuota.numero_cuota}.docx'
+            doc.save(temp_path)
+            archivos_generados.append(temp_path)
         
-        # Enviar archivo
+        # Crear un archivo ZIP con todos los pagarés
+        zip_path = f'temp/pagares_prestamo_{prestamo_id}.zip'
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for archivo in archivos_generados:
+                zipf.write(archivo, os.path.basename(archivo))
+        
+        # Enviar archivo ZIP
         return send_file(
-            temp_path,
+            zip_path,
             as_attachment=True,
-            download_name=f'Pagare_Prestamo_{cliente.apellido}_{prestamo_id}.docx'
+            download_name=f'Pagarés_Prestamo_{cliente.apellido}_{prestamo_id}.zip'
         )
         
     except Exception as e:
         print(f"Error detallado: {str(e)}")  # Para debugging
-        flash(f'Error al generar el pagaré: {str(e)}', 'error')
+        flash(f'Error al generar los pagarés: {str(e)}', 'error')
         return redirect(url_for('prestamos'))
 
 def numero_a_letras(numero):
@@ -1509,6 +1750,7 @@ def numero_a_letras(numero):
     return num2words(numero, lang='es').upper()
 
 @app.route('/dni/<string:dni>')
+@user_required
 def ver_dni(dni):
     try:
         # Buscar como cliente
@@ -1602,6 +1844,274 @@ def ver_dni(dni):
         
     except Exception as e:
         return f"<pre>Error al procesar la consulta: {str(e)}</pre>"
+
+@app.route('/seleccionar_cliente_prestamo')
+@login_required
+def seleccionar_cliente_prestamo():
+    clientes = Cliente.query.order_by(Cliente.apellido).all()
+    return render_template('seleccionar_cliente_prestamo.html', clientes=clientes, active_page='cargar_prestamo')
+
+@app.route('/eliminar_prestamo/<int:id_prestamo>', methods=['POST'])
+@login_required
+@admin_required
+def eliminar_prestamo(id_prestamo):
+    try:
+        prestamo = Prestamo.query.get_or_404(id_prestamo)
+        
+        # Store client ID and loan details before deletion
+        cliente_id = prestamo.id_cliente
+        prestamo_data = {
+            'id_prestamo': prestamo.id_prestamo,
+            'id_cliente': prestamo.id_cliente,
+            'monto_prestado': prestamo.monto_prestado,
+            'cuotas_totales': prestamo.cuotas_totales,
+            'fecha_inicio': prestamo.fecha_inicio.strftime('%Y-%m-%d'),
+            'estado': prestamo.estado.name if prestamo.estado else None  # Guardar solo el nombre del estado
+        }
+        
+        # Get all related installments for audit
+        cuotas_data = [{
+            'id_cuota': cuota.id_cuota,
+            'numero_cuota': cuota.numero_cuota,
+            'monto': cuota.monto,
+            'estado': cuota.estado.name if cuota.estado else None,  # Guardar solo el nombre del estado
+            'fecha_vencimiento': cuota.fecha_vencimiento.strftime('%Y-%m-%d')
+        } for cuota in prestamo.cuotas]
+        
+        # Create audit log for loan deletion
+        audit_change('delete', 'prestamo', prestamo.id_prestamo, changes=prestamo_data)
+        
+        # Create audit logs for each installment deletion
+        for cuota_data in cuotas_data:
+            audit_change('delete', 'cuota', cuota_data['id_cuota'], changes=cuota_data)
+        
+        # Delete the loan (this will cascade delete related installments)
+        db.session.delete(prestamo)
+        db.session.commit()
+        
+        flash('Préstamo y sus cuotas eliminados exitosamente', 'success')
+        
+        # Return JSON response for AJAX request
+        return jsonify({
+            'success': True,
+            'message': 'Préstamo y sus cuotas eliminados exitosamente',
+            'cliente_id': cliente_id
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Error al eliminar el préstamo: {str(e)}'
+        }), 400
+
+@app.route('/pago_parcial/<int:cuota_id>', methods=['POST'])
+@login_required
+@admin_required
+def pago_parcial(cuota_id):
+    try:
+        cuota = Cuota.query.get_or_404(cuota_id)
+        if cuota.estado not in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]:
+            flash('La cuota no está en estado válido para pago parcial.', 'error')
+            return redirect(url_for('cuotas_a_vencer'))
+        monto_pagado = float(request.form.get('monto_pagado', 0))
+        if monto_pagado <= 0:
+            flash('El monto del pago debe ser mayor a 0.', 'error')
+            return redirect(url_for('cuotas_a_vencer'))
+        interes_pagado = None
+        interes_str = request.form.get('interes_acumulado', '').strip()
+        if interes_str and interes_str != '0':
+            try:
+                interes_pagado = float(interes_str)
+                if interes_pagado < 0:
+                    flash('El interés no puede ser negativo', 'error')
+                    return redirect(url_for('cuotas_a_vencer'))
+            except ValueError:
+                flash('El interés debe ser un número válido', 'error')
+                return redirect(url_for('cuotas_a_vencer'))
+        marcar_pagada = request.form.get('marcar_pagada') == 'on'
+        nota_pago = request.form.get('nota_pago', '')
+        # saldo_pendiente = monto de capital restante (sin interés)
+        saldo_pendiente = cuota.monto_pendiente if cuota.monto_pendiente is not None else cuota.monto
+        interes_val = float(interes_pagado) if interes_pagado else 0.0
+        if marcar_pagada:
+            # Forzar pago del capital restante sin importar el monto ingresado
+            monto_principal = saldo_pendiente
+        else:
+            monto_principal = monto_pagado - interes_val
+            if monto_principal <= 0 or monto_principal > saldo_pendiente:
+                flash('El monto del pago debe ser mayor a 0 y no superar el saldo pendiente.', 'error')
+                return redirect(url_for('cuotas_a_vencer'))
+        tipo_pago = 'total' if marcar_pagada else 'parcial'
+        pago = cuota.registrar_pago_con_trazabilidad(
+            monto_pagado=monto_principal,
+            interes_pagado=interes_pagado,
+            tipo_pago=tipo_pago,
+            nota=nota_pago,
+            usuario_id=current_user.id
+        )
+        prestamo = cuota.prestamo
+        prestamo.monto_adeudado = sum((c.monto_pendiente or 0) for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
+        db.session.commit()
+        flash('Pago registrado exitosamente', 'success')
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f'Error al registrar pago parcial: {str(e)}', exc_info=True)
+        flash(f'Error al registrar el pago: {str(e)}', 'error')
+    return redirect(url_for('cuotas_a_vencer'))
+
+@app.route('/ajuste_manual/<int:cuota_id>', methods=['POST'])
+@login_required
+@admin_required
+def ajuste_manual(cuota_id):
+    try:
+        cuota = Cuota.query.get_or_404(cuota_id)
+        if cuota.estado not in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]:
+            flash('La cuota no está en estado válido para ajuste manual.', 'error')
+            return redirect(url_for('cuotas_a_vencer'))
+        monto_ajuste = float(request.form.get('monto_ajuste', 0))
+        saldo_pendiente = cuota.monto_pendiente if cuota.monto_pendiente is not None else cuota.monto
+        if monto_ajuste <= 0 or monto_ajuste > saldo_pendiente:
+            flash('El monto del ajuste debe ser mayor a 0 y no superar el saldo pendiente.', 'error')
+            return redirect(url_for('cuotas_a_vencer'))
+        nota_ajuste = request.form.get('nota_ajuste', '')
+        pago = cuota.registrar_pago_con_trazabilidad(
+            monto_pagado=monto_ajuste,
+            interes_pagado=None,
+            tipo_pago='ajuste',
+            nota=nota_ajuste,
+            usuario_id=current_user.id
+        )
+        prestamo = cuota.prestamo
+        prestamo.monto_adeudado = sum((c.monto_pendiente or 0) for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
+        db.session.commit()
+        flash('Ajuste manual registrado exitosamente', 'success')
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f'Error al registrar ajuste manual: {str(e)}', exc_info=True)
+        flash(f'Error al registrar el ajuste: {str(e)}', 'error')
+    return redirect(url_for('cuotas_a_vencer'))
+
+@app.route('/marcar_proceso_judicial', methods=['POST'])
+@login_required
+@admin_required
+def marcar_proceso_judicial():
+    try:
+        data = request.get_json()
+        id_prestamo = data.get('id_prestamo')
+        prestamo = Prestamo.query.get_or_404(id_prestamo)
+        
+        prestamo.marcar_judicial()
+        audit_change('update', 'prestamo', prestamo.id_prestamo, changes={
+            'estado': 'JUDICIAL',
+            'fecha_cambio': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/admin/gestionar_prestamos', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def gestionar_prestamos():
+    from datetime import datetime
+    if request.method == 'POST':
+        cuota_id = request.form.get('cuota_id')
+        nuevo_estado = request.form.get('nuevo_estado')
+        monto = request.form.get('monto')
+        monto_pagado = request.form.get('monto_pagado')
+        fecha_pago = request.form.get('fecha_pago')
+        usuario_id = current_user.id
+        try:
+            cuota = Cuota.query.get_or_404(cuota_id)
+            prestamo = cuota.prestamo
+            cambios = {}
+            
+            # Convertir el string del estado a enum
+            nuevo_estado_enum = EstadoCuota[nuevo_estado]
+            
+            # Actualizar estado
+            if cuota.estado != nuevo_estado_enum:
+                cambios['estado'] = {'de': cuota.estado.name, 'a': nuevo_estado_enum.name}
+                cuota.estado = nuevo_estado_enum
+                
+                # Si la cuota se marca como JUDICIAL, actualizar proceso_judicial
+                if nuevo_estado_enum == EstadoCuota.JUDICIAL:
+                    cuota.proceso_judicial = True
+            
+            # Actualizar monto de la cuota
+            if monto:
+                monto_float = float(monto)
+                if cuota.monto != monto_float:
+                    cambios['monto'] = {'de': cuota.monto, 'a': monto_float}
+                    cuota.monto = monto_float
+                    # Actualizar monto pendiente basado en el nuevo monto
+                    cuota.monto_pendiente = monto_float - (cuota.monto_pagado or 0)
+            
+            # Actualizar monto pagado
+            monto_pagado_float = float(monto_pagado)
+            if cuota.monto_pagado != monto_pagado_float:
+                cambios['monto_pagado'] = {'de': cuota.monto_pagado, 'a': monto_pagado_float}
+                cuota.monto_pagado = monto_pagado_float
+                # Actualizar monto pendiente
+                cuota.monto_pendiente = cuota.monto - monto_pagado_float
+            
+            # Actualizar fecha de pago
+            if fecha_pago:
+                fecha_pago_dt = datetime.strptime(fecha_pago, '%Y-%m-%d')
+                if not cuota.fecha_pago or cuota.fecha_pago.date() != fecha_pago_dt.date():
+                    cambios['fecha_pago'] = {'de': str(cuota.fecha_pago), 'a': fecha_pago}
+                    cuota.fecha_pago = fecha_pago_dt
+            
+            # Si se marca como pagada y no existe pago, crear registro en Pago
+            if nuevo_estado_enum == EstadoCuota.PAGADA and not cuota.pagos:
+                nuevo_pago = Pago(
+                    id_cuota=cuota.id_cuota,
+                    fecha_pago=cuota.fecha_pago or datetime.now(),
+                    monto_pagado=cuota.monto_pagado,
+                    interes_pagado=0.0,
+                    tipo_pago='total',
+                    nota='Pago registrado desde módulo de gestión',
+                    created_by=usuario_id,
+                    created_at=datetime.now()
+                )
+                db.session.add(nuevo_pago)
+                cambios['pago_registrado'] = True
+            
+            # Recalcular estado del préstamo
+            if all(c.estado == EstadoCuota.PAGADA for c in prestamo.cuotas):
+                if prestamo.estado != EstadoPrestamo.FINALIZADO:
+                    cambios['estado_prestamo'] = {'de': prestamo.estado.name, 'a': EstadoPrestamo.FINALIZADO.name}
+                    prestamo.estado = EstadoPrestamo.FINALIZADO
+                    prestamo.proceso_judicial = False
+            elif any(c.estado == EstadoCuota.JUDICIAL for c in prestamo.cuotas):
+                if prestamo.estado != EstadoPrestamo.JUDICIAL:
+                    cambios['estado_prestamo'] = {'de': prestamo.estado.name, 'a': EstadoPrestamo.JUDICIAL.name}
+                    prestamo.estado = EstadoPrestamo.JUDICIAL
+                    prestamo.proceso_judicial = True
+            else:
+                if prestamo.estado != EstadoPrestamo.ACTIVO:
+                    cambios['estado_prestamo'] = {'de': prestamo.estado.name, 'a': EstadoPrestamo.ACTIVO.name}
+                    prestamo.estado = EstadoPrestamo.ACTIVO
+                    prestamo.proceso_judicial = False
+            
+            # Recalcular monto adeudado del préstamo
+            prestamo.monto_adeudado = sum((c.monto_pendiente or 0) for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
+            
+            # Log de auditoría
+            audit_change('update', 'cuota', cuota.id_cuota, changes=cambios)
+            db.session.commit()
+            flash('Cuota actualizada correctamente.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f'Error al actualizar cuota desde gestión: {str(e)}', exc_info=True)
+            flash(f'Error al actualizar la cuota: {str(e)}', 'error')
+        return redirect(url_for('gestionar_prestamos'))
+    
+    # GET: mostrar préstamos y cuotas
+    prestamos = Prestamo.query.order_by(Prestamo.id_prestamo.desc()).all()
+    return render_template('admin_gestionar_prestamos.html', prestamos=prestamos, EstadoCuota=EstadoCuota)
 
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")

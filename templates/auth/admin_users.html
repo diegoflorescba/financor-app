@@ -1,0 +1,243 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container">
+    <!-- Título de la página -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-purple-100 text-dark py-3">
+            <h2 class="mb-0 text-center fs-3 fw-bold">
+                <i class="fas fa-users-cog me-2"></i>
+                Administración de Usuarios
+            </h2>
+        </div>
+    </div>
+
+    <!-- Botón para agregar nuevo usuario -->
+    <div class="mb-4">
+        <button onclick="openNewUserModal()" class="btn btn-primary">
+            <i class="fas fa-user-plus me-2"></i>Nuevo Usuario
+        </button>
+    </div>
+
+    <!-- Tabla de usuarios -->
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Rol</th>
+                            <th>Último Acceso</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr>
+                            <td>{{ user.username }}</td>
+                            <td>{{ user.role }}</td>
+                            <td>{{ user.last_login.strftime('%d/%m/%Y %H:%M') if user.last_login else 'Nunca' }}</td>
+                            <td>
+                                <span class="badge {% if user.is_active %}bg-success{% else %}bg-danger{% endif %}">
+                                    {{ 'Activo' if user.is_active else 'Inactivo' }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button onclick="editUser('{{ user.id }}')" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button
+                                        onclick="toggleUserStatus('{{ user.id }}', {{ 'true' if user.is_active else 'false' }})"
+                                        class="btn btn-sm {% if user.is_active %}btn-danger{% else %}btn-success{% endif %}">
+                                        <i
+                                            class="fas {% if user.is_active %}fa-user-times{% else %}fa-user-check{% endif %}"></i>
+                                    </button>
+                                    <button onclick="resetPassword('{{ user.id }}')" class="btn btn-sm btn-info">
+                                        <i class="fas fa-key"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para nuevo usuario -->
+<div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userModalLabel">Nuevo Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm" method="POST" action="{{ url_for('auth.create_user') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" id="userId" name="user_id">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Nombre de Usuario</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Contraseña</label>
+                        <input type="password" class="form-control" id="password" name="password">
+                        <small class="text-muted">Dejar en blanco para mantener la contraseña actual al editar</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="role" class="form-label">Rol</label>
+                        <select class="form-select" id="role" name="role" required>
+                            <option value="user">Usuario</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="is_admin" name="is_admin">
+                        <label class="form-check-label" for="is_admin">¿Es administrador?</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="saveUser()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let currentAction = 'create';
+
+    function openNewUserModal() {
+        currentAction = 'create';
+        document.getElementById('userForm').reset();
+        document.getElementById('userId').value = '';
+        document.getElementById('userModalLabel').textContent = 'Nuevo Usuario';
+        document.getElementById('password').required = true;
+        document.getElementById('userForm').action = "{{ url_for('auth.create_user') }}";
+        const modal = new bootstrap.Modal(document.getElementById('userModal'));
+        modal.show();
+    }
+
+    function editUser(userId) {
+        currentAction = 'edit';
+        fetch(`/auth/get_user/${userId}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('userId').value = data.id;
+                document.getElementById('username').value = data.username;
+                document.getElementById('role').value = data.role;
+                document.getElementById('is_admin').checked = data.is_admin;
+                document.getElementById('password').required = false;
+                document.getElementById('userModalLabel').textContent = 'Editar Usuario';
+                document.getElementById('userForm').action = "{{ url_for('auth.update_user') }}";
+                const modal = new bootstrap.Modal(document.getElementById('userModal'));
+                modal.show();
+            });
+    }
+
+    function saveUser() {
+        const form = document.getElementById('userForm');
+        const formData = new FormData(form);
+
+        fetch(form.action, {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Cerrar el modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('userModal'));
+                    modal.hide();
+
+                    // Mostrar mensaje de éxito
+                    showAlert(data.message, 'success');
+
+                    // Recargar la página después de un breve delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    // Mostrar mensaje de error
+                    showAlert(data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Error al procesar la solicitud', 'danger');
+            });
+    }
+
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.role = 'alert';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+
+        // Insertar la alerta al principio del contenedor
+        const container = document.querySelector('.container');
+        container.insertBefore(alertDiv, container.firstChild);
+
+        // Auto-cerrar después de 3 segundos
+        setTimeout(() => {
+            alertDiv.remove();
+        }, 3000);
+    }
+
+    document.getElementById('role').addEventListener('change', function () {
+        document.getElementById('is_admin').checked = this.value === 'admin';
+    });
+
+    document.getElementById('is_admin').addEventListener('change', function () {
+        document.getElementById('role').value = this.checked ? 'admin' : 'user';
+    });
+
+    function toggleUserStatus(userId, currentStatus) {
+        if (!confirm(`¿Está seguro que desea ${currentStatus ? 'desactivar' : 'activar'} este usuario?`)) {
+            return;
+        }
+
+        fetch(`/auth/toggle_user_status/${userId}`, {
+            method: 'POST'
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    showAlert(data.message || 'Error al cambiar el estado del usuario', 'danger');
+                }
+            });
+    }
+
+    function resetPassword(userId) {
+        if (!confirm('¿Está seguro que desea restablecer la contraseña de este usuario?')) {
+            return;
+        }
+
+        fetch(`/auth/reset_password/${userId}`, {
+            method: 'POST'
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('Contraseña restablecida con éxito. La nueva contraseña es: ' + data.password, 'success');
+                } else {
+                    showAlert(data.message || 'Error al restablecer la contraseña', 'danger');
+                }
+            });
+    }
+</script>
+{% endblock %}

@@ -1,140 +1,506 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="container mt-5">
-    <h1 class="main-title">Cuotas a Vencer - {{ mes_actual }}</h1>
-    <!-- Financial Summary -->
-    <div class="financial-summary">
-        <div class="summary-content">
-            <h3 class="text-primary">
-                <div class="summary-title">$ Total a Cobrar General</div>
-                <div class="summary-amount">${{ "{:,.2f}".format(total_a_cobrar) }}</div>
-            </h3>
-        </div>
-    </div>
-
-    <div class="card shadow">
-        <div class="report-actions">
-            <a href="{{ url_for('exportar_excel') }}" class="btn-action">
-                <i class="fas fa-file-excel"></i> Exportar Excel
-            </a>
-            <a href="#" class="btn-action" onclick="window.print()">
-                <i class="fas fa-file-pdf"></i> Imprimir PDF
-            </a>
-        </div>
-
-        <div class="card-body">
-            <!-- Tabla de Cuotas -->
-            <div class="table-responsive">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>Cliente</th>
-                            <th>Teléfono</th>
-                            <th>Cuota</th>
-                            <th>Vencimiento</th>
-                            <th>Monto</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for cuota in cuotas %}
-                        <tr class="{{ 'row-warning' if (cuota.fecha_vencimiento.date() - today).days <= 3 }}">
-                            <td>{{ cuota.prestamo.cliente.apellido }}, {{ cuota.prestamo.cliente.nombre }}</td>
-                            <td>{{ cuota.prestamo.cliente.telefono }}</td>
-                            <td class="text-center">{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}
-                            </td>
-                            <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
-                            <td class="text-right">${{ "{:,.2f}".format(cuota.monto) }}</td>
-                            <td class="text-center">
-                                <span class="status-badge 
-                                    {{ 'danger' if cuota.fecha_vencimiento.date() < today else 
-                                       'warning' if (cuota.fecha_vencimiento.date() - today).days <= 3 else 
-                                       'info' }}">
-                                    {% if cuota.fecha_vencimiento.date() < today %} Vencida ({{ (today -
-                                        cuota.fecha_vencimiento.date()).days }} días) {% else %} {{
-                                        (cuota.fecha_vencimiento.date() - today).days }} días {% endif %} </span>
-                            </td>
-                            <td class="text-center">
-                                <div class="action-buttons">
-                                    <a href="{{ url_for('ver_cliente', id=cuota.prestamo.cliente.id_cliente) }}"
-                                        class="btn-icon" title="Ver cliente">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    {% if not cuota.pagada and cuota.fecha_vencimiento.month == today.month %}
-                                    <form action="{{ url_for('pagar_cuota', cuota_id=cuota.id_cuota) }}" method="POST"
-                                        style="display: inline;">
-                                        <button type="submit" class="btn-icon success"
-                                            onclick="return confirm('¿Confirmar el pago de la cuota por ${{ '{:,.2f}'.format(cuota.monto) }}?')"
-                                            title="Registrar pago">
-                                            <i class="fas fa-check"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+<!-- Contenedor principal para el título y los resúmenes -->
+<div class="container mb-4">
+    <div class="row justify-content-center g-3">
+        <div class="col-12">
+            <!-- Título principal -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-purple-100 text-dark py-3">
+                    <h2 class="mb-0 text-center fs-3 fw-bold">
+                        <i class="fas fa-calendar-alt me-2"></i>
+                        Cuotas a Vencer - {{ mes_actual }}
+                    </h2>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Panel de resumen financiero con clase específica -->
+<div class="financial-summary-section mb-4">
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="financial-summary">
+                <div class="summary-title">
+                    Total a Cobrar
+                </div>
+                <div class="summary-amount text-success">
+                    ${{ "{:,.2f}".format(total_a_cobrar).replace(',', '.') }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla de cuotas -->
+<div class="table-section">
+    <div class="table-header bg-purple-100 text-dark py-3 px-4 mb-0">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0 fs-3 fw-bold">
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                Listado de Cuotas
+            </h2>
+            <div>
+                <a href="{{ url_for('exportar_excel') }}" class="btn btn-outline-success btn-sm me-2">
+                    <i class="fas fa-file-excel me-2"></i>Exportar Excel
+                </a>
+                <a href="#" class="btn btn-outline-primary btn-sm" onclick="window.print()">
+                    <i class="fas fa-file-pdf me-2"></i>Imprimir PDF
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Cliente</th>
+                    <th>Teléfono</th>
+                    <th>Cuota</th>
+                    <th>Vencimiento</th>
+                    <th class="text-end">Monto Original</th>
+                    <th class="text-end">Interés</th>
+                    <th class="text-end">Total a Pagar</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cuota in cuotas %}
+                <tr>
+                    <td>{{ cuota.prestamo.cliente.apellido }}, {{ cuota.prestamo.cliente.nombre }}</td>
+                    <td>{{ cuota.prestamo.cliente.telefono }}</td>
+                    <td>{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}</td>
+                    <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                    <td class="text-end">${{ "{:.2f}".format(cuota.monto).replace(',', '.') }}</td>
+                    <td class="text-end">$0.00</td>
+                    <td class="text-end">
+                        {% set interes_calculado = cuota.calcular_interes_diario() %}
+                        {% if cuota.estado.value == 'PAGO_PARCIAL' %}
+                        <span class="badge bg-info">Pago Parcial</span>
+                        ${{ '{:,.2f}'.format(cuota.monto_pagado).replace(',', '.') }} / ${{
+                        '{:,.2f}'.format(cuota.monto).replace(',', '.') }}
+                        {% if interes_calculado > 0 %}
+                        <br><small>Pendiente: ${{ '{:,.2f}'.format(cuota.monto_pendiente +
+                            interes_calculado).replace(',', '.') }} (incluye interés)</small>
+                        {% else %}
+                        <br><small>Pendiente: ${{ '{:,.2f}'.format(cuota.monto_pendiente).replace(',', '.') }}</small>
+                        {% endif %}
+                        {% elif cuota.estado.value == 'PAGADA' %}
+                        <span class="badge bg-success">Pagada</span>
+                        ${{ '{:,.2f}'.format(cuota.monto_pagado).replace(',', '.') }}
+                        {% else %}
+                        <span class="badge bg-danger">Pendiente</span>
+                        {% if interes_calculado > 0 %}
+                        ${{ '{:,.2f}'.format(cuota.monto + interes_calculado).replace(',', '.') }} (incluye interés)
+                        {% else %}
+                        ${{ '{:,.2f}'.format(cuota.monto).replace(',', '.') }}
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <span class="badge {{ cuota.estado.value | lower }}-badge">
+                            {{ cuota.estado.value }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
+                                data-bs-target="#pagoParcialModal{{ cuota.id_cuota }}"
+                                data-monto-pendiente="{{ cuota.monto_pendiente + cuota.calcular_interes_diario() }}"
+                                data-interes-pendiente="{{ cuota.calcular_interes_diario() }}">
+                                <i class="fas fa-money-bill-wave me-1"></i>
+                                Pagar
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+
+                <!-- Modal de Pago (único) -->
+                <div class="modal fade" id="pagoParcialModal{{ cuota.id_cuota }}" tabindex="-1" aria-hidden="true">
+                    {% set interes_calculado = cuota.calcular_interes_diario() %}
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Registrar Pago</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                    aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form action="{{ url_for('pago_parcial', cuota_id=cuota.id_cuota) }}" method="POST">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="mb-3">
+                                        <label class="form-label">Cliente</label>
+                                        <input type="text" class="form-control"
+                                            value="{{ cuota.prestamo.cliente.apellido }}, {{ cuota.prestamo.cliente.nombre }}"
+                                            readonly>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Cuota</label>
+                                        <input type="text" class="form-control"
+                                            value="{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}"
+                                            readonly>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Monto Original</label>
+                                        <input type="text" class="form-control" data-monto-original
+                                            value="${{ '{:,.2f}'.format(cuota.monto).replace(',', '.') }}" readonly>
+                                    </div>
+                                    {% if interes_calculado > 0 %}
+                                    <div class="mb-3">
+                                        <label class="form-label">Interés Acumulado</label>
+                                        <input type="number" step="0.01" class="form-control" data-interes-acumulado
+                                            name="interes_acumulado" value="{{ '{:.2f}'.format(interes_calculado) }}"
+                                            placeholder="Interés calculado automáticamente">
+                                    </div>
+                                    {% endif %}
+                                    <div class="mb-3">
+                                        <label for="monto_pagado" class="form-label">Total a Cobrar</label>
+                                        <input type="number" step="0.01" class="form-control" id="monto_pagado"
+                                            name="monto_pagado" required>
+                                    </div>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" name="marcar_pagada"
+                                            id="marcar_pagada_{{ cuota.id_cuota }}">
+                                        <label class="form-check-label" for="marcar_pagada_{{ cuota.id_cuota }}">
+                                            Marcar como Cuota Pagada
+                                        </label>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="nota_pago" class="form-label">Nota (opcional)</label>
+                                        <textarea class="form-control" id="nota_pago" name="nota_pago"
+                                            rows="2"></textarea>
+                                    </div>
+                                    <div class="text-end">
+                                        <button type="button" class="btn btn-secondary"
+                                            data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="submit" class="btn btn-primary">Registrar Pago</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <style>
-    .card {
-        border: none;
-    }
-
-    .shadow-sm {
-        box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .075) !important;
-    }
-
-    .text-primary {
-        color: #0d6efd !important;
-        font-size: 1.25rem;
-    }
-
-    .text-success {
-        color: #28a745 !important;
-    }
-
-    .card-header {
-        background-color: #fff;
-        border-bottom: 1px solid rgba(0, 0, 0, .125);
-    }
-
-    @media print {
-        .btn {
-            display: none;
-        }
-    }
-
-    /* Estilos del Financial Summary */
-    .financial-summary {
-        background: #fff;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        margin-bottom: 2rem;
+    /* Estilos para los contenedores principales */
+    .container {
         padding: 1.5rem;
     }
 
-    .summary-content {
+    /* Estilos para el resumen financiero */
+    .financial-summary {
+        padding: 2rem 1rem;
         text-align: center;
+        background-color: #f3f4f6;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 160px;
+        overflow: hidden;
+        width: 100%;
     }
 
     .summary-title {
-        color: #0066ff;
-        font-size: 1.2rem;
-        margin-bottom: 0.5rem;
+        font-size: 1.3rem;
+        color: #6B7280;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        white-space: normal;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        min-height: 2.5rem;
     }
 
     .summary-amount {
-        color: #00b300;
-        font-size: 2rem;
+        font-size: 1.7rem;
         font-weight: bold;
+        line-height: 1.2;
+        white-space: nowrap;
+        letter-spacing: -0.5px;
+        width: 100%;
+        padding: 0 0.5rem;
+        color: #6B7280;
+    }
+
+    .summary-amount.text-success,
+    .summary-amount.text-warning,
+    .summary-amount.text-info {
+        color: #6B7280 !important;
+    }
+
+    .financial-summary:hover {
+        transform: translateY(-2px);
+        transition: transform 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background-color: #f8f9fa;
+    }
+
+    /* Estilos para la tabla */
+    .table-section {
+        min-width: 100vw;
+        margin-left: calc(-50vw + 50%);
+        margin-right: calc(-50vw + 50%);
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .table-header {
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .table-responsive {
+        margin: 0;
+        padding: 0;
+        border: none;
+    }
+
+    .table {
+        margin: 0;
+        width: 100%;
+    }
+
+    .table th {
+        background-color: #f3f4f6;
+        border-bottom: 2px solid #e5e7eb;
+        font-weight: 600;
+        color: #374151;
+        padding: 1rem;
+        white-space: nowrap;
+    }
+
+    .table td {
+        padding: 0.75rem 1rem;
+        vertical-align: middle;
+    }
+
+    .table tbody tr:hover {
+        background-color: #f9fafb;
+    }
+
+    /* Badges para estados */
+    .pendiente-badge {
+        background-color: #FEF3C7;
+        color: #92400E;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+    }
+
+    .pago_parcial-badge {
+        background-color: #DBEAFE;
+        color: #1E40AF;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+    }
+
+    .pagada-badge {
+        background-color: #D1FAE5;
+        color: #065F46;
+        padding: 0.5rem 1rem;
+        border-radius: 9999px;
+        font-weight: 500;
+    }
+
+    /* Estilos para los botones */
+    .btn-group {
+        gap: 0.5rem;
+    }
+
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    /* Estilos para los modales */
+    .modal-content {
+        border-radius: 12px;
+    }
+
+    .modal-header {
+        background-color: #f3f4f6;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .modal-title {
+        color: #374151;
+        font-weight: 600;
+    }
+
+    .form-label {
+        font-weight: 500;
+        color: #4B5563;
+    }
+
+    .form-control:read-only {
+        background-color: #F9FAFB;
+    }
+
+    /* Media queries para asegurar responsividad */
+    @media (max-width: 1200px) {
+        .financial-summary {
+            padding: 1.5rem 0.75rem;
+        }
+
+        .summary-title {
+            font-size: 1rem;
+        }
+
+        .summary-amount {
+            font-size: 1.5rem;
+        }
+    }
+
+    @media (max-width: 992px) {
+        .financial-summary {
+            padding: 1.25rem 0.5rem;
+            min-height: 140px;
+        }
+
+        .summary-title {
+            font-size: 0.95rem;
+            min-height: 2rem;
+        }
+
+        .summary-amount {
+            font-size: 1.3rem;
+        }
+    }
+
+    @media screen and (min-width: 1024px) {
+        .table-section {
+            min-width: 100vw;
+            margin-left: calc(-50vw + 50%);
+            margin-right: calc(-50vw + 50%);
+        }
+
+        .table-responsive {
+            overflow-x: visible;
+        }
+
+        .table {
+            width: 100%;
+            margin: 0 auto;
+            max-width: none;
+        }
+    }
+
+    /* Contenedor específico para la sección de resumen financiero */
+    .financial-summary-section {
+        width: 95%;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 0 1rem;
+    }
+
+    /* Estilos para el resumen financiero */
+    .financial-summary {
+        padding: 2rem 1.5rem;
+        text-align: center;
+        background-color: #f3f4f6;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 160px;
+    }
+
+    .summary-title {
+        font-size: 1.3rem;
+        color: #6B7280;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        white-space: normal;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        min-height: 2.5rem;
+    }
+
+    .summary-amount {
+        font-size: 1.6rem;
+        font-weight: bold;
+        line-height: 1.2;
+        white-space: nowrap;
+        letter-spacing: -0.5px;
+        padding: 0.5rem;
+        color: #6B7280;
+    }
+
+    .summary-amount.text-success,
+    .summary-amount.text-warning,
+    .summary-amount.text-info,
+    .summary-amount.text-danger {
+        color: #6B7280 !important;
+    }
+
+    .financial-summary:hover {
+        transform: translateY(-2px);
+        transition: transform 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background-color: #f8f9fa;
+    }
+
+    /* Media queries para asegurar responsividad */
+    @media (max-width: 1200px) {
+        .financial-summary {
+            padding: 1.5rem 1rem;
+        }
+
+        .summary-amount {
+            font-size: 1.4rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .financial-summary-section {
+            width: 100%;
+            padding: 0 0.5rem;
+        }
+
+        .summary-amount {
+            font-size: 1.3rem;
+        }
     }
 </style>
+
+<script>
+    // Precargar el total a cobrar automáticamente al abrir el modal de pago
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[id^="pagoParcialModal"]').forEach(function (modal) {
+            modal.addEventListener('show.bs.modal', function (event) {
+                var totalInput = this.querySelector('input[name="monto_pagado"]');
+                // Leer los valores del botón que disparó el modal
+                var btn = event.relatedTarget;
+                if (btn) {
+                    var montoPendiente = parseFloat(btn.getAttribute('data-monto-pendiente')) || 0;
+                    var interesPendiente = parseFloat(btn.getAttribute('data-interes-pendiente')) || 0;
+                    if (totalInput) {
+                        totalInput.value = (montoPendiente + interesPendiente).toFixed(2);
+                    }
+                }
+            });
+        });
+    });
+</script>
 {% endblock %}
