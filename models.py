@@ -232,18 +232,22 @@ class Cuota(db.Model):
     def __repr__(self):
         return f'<Cuota {self.numero_cuota} del Préstamo {self.id_prestamo}>'
 
-    def calcular_interes_diario(self):
-        """Calcula el interés diario (0.5% por día) desde la fecha de vencimiento"""
+    def calcular_interes_diario(self, fecha_actual=None):
+        """Calcula el interés diario (0.5% por día) desde el día 10 del mes de la cuota."""
         if self.estado == EstadoCuota.PAGADA:
             return 0.0
 
-        fecha_actual = datetime.now()
-        if fecha_actual <= self.fecha_vencimiento:
+        fecha_actual = fecha_actual or datetime.now()
+        fecha_inicio_interes = datetime(
+            self.fecha_vencimiento.year,
+            self.fecha_vencimiento.month,
+            10
+        )
+        if fecha_actual <= fecha_inicio_interes:
             return 0.0
 
-        monto_base = self.monto_pendiente or self.monto
-        dias_atraso = (fecha_actual - self.fecha_vencimiento).days
-        return monto_base * 0.005 * dias_atraso
+        dias_atraso = (fecha_actual.date() - fecha_inicio_interes.date()).days
+        return self.monto * 0.005 * dias_atraso
 
     def monto_total_pendiente(self):
         """Retorna el monto total pendiente incluyendo intereses"""

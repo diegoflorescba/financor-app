@@ -429,9 +429,10 @@ def pagar_cuota(cuota_id):
             flash('El monto pendiente de la cuota no es válido.', 'error')
             return redirect(url_for('cuotas_a_vencer'))
 
+        interes_pendiente = cuota.calcular_interes_diario()
         pago = cuota.registrar_pago_con_trazabilidad(
             monto_pagado=monto_pendiente,
-            interes_pagado=None,
+            interes_pagado=interes_pendiente,
             tipo_pago='total',
             nota='Pago total de cuota',
             usuario_id=current_user.id
