@@ -44,7 +44,7 @@
                                 <tr {% if cuota.estado.name=='JUDICIAL' or cuota.proceso_judicial %}class="bg-red-100"
                                     aria-label="Cuota judicializada" {% endif %}>
                                     <form method="POST" action="{{ url_for('gestionar_prestamos') }}">
-                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="cuota_id" value="{{ cuota.id_cuota }}">
                                         <td tabindex="0">{{ cuota.numero_cuota }}</td>
                                         <td>
@@ -80,10 +80,10 @@
                                                 cuota.proceso_judicial %}disabled{% endif %}>
                                         </td>
                                         <td>
-                                            <button type="submit" class="btn btn-primary btn-sm"
+                                            <button type="submit"
+                                                class="btn btn-primary btn-sm {% if cuota.estado.name=='JUDICIAL' or cuota.proceso_judicial %}opacity-50 cursor-not-allowed{% endif %}"
                                                 aria-label="Guardar cambios de cuota" tabindex="0" {% if
-                                                cuota.estado.name=='JUDICIAL' or cuota.proceso_judicial %}disabled
-                                                class="opacity-50 cursor-not-allowed" {% endif %}>Guardar</button>
+                                                cuota.estado.name=='JUDICIAL' or cuota.proceso_judicial %}disabled{% endif %}>Guardar</button>
                                             {% if cuota.estado.name == 'JUDICIAL' or cuota.proceso_judicial %}
                                             <span class="text-red-600 font-semibold ml-2"
                                                 aria-label="Cuota judicializada">Judicializada</span>

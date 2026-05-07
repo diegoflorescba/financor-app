@@ -677,7 +677,8 @@ def debug_db():
         return f"<pre>{debug_info}</pre>"
 
 
-@app.route('/recrear_cuotas/<int:prestamo_id>')
+# Ruta desactivada: era una acción destructiva por GET y podía borrar/recrear cuotas reales por accidente.
+# @app.route('/recrear_cuotas/<int:prestamo_id>')
 @login_required
 @admin_required
 def recrear_cuotas(prestamo_id):
@@ -1293,9 +1294,10 @@ def actualizar_estado_cuota():
                     'error': 'La cuota no tiene saldo pendiente para registrar.'
                 }), 400
 
+            interes_pendiente = cuota.calcular_interes_diario()
             cuota.registrar_pago_con_trazabilidad(
                 monto_pagado=monto_restante,
-                interes_pagado=None,
+                interes_pagado=interes_pendiente,
                 tipo_pago='total',
                 nota='Pago registrado desde listado de préstamos',
                 usuario_id=current_user.id
@@ -1402,7 +1404,8 @@ def test_bcra(cuit):
     except Exception as e:
         return f'Error: {str(e)}\n\nStack trace:\n{traceback.format_exc()}'
 
-@app.route('/actualizar_fechas_prestamo/<int:id_prestamo>', methods=['GET', 'POST'])
+# Ruta desactivada: usaba fechas hardcodeadas y reseteaba cuotas/pagos de un préstamo real.
+# @app.route('/actualizar_fechas_prestamo/<int:id_prestamo>', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def actualizar_fechas_prestamo(id_prestamo):

@@ -109,7 +109,7 @@
                         <div class="btn-group" role="group">
                             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal"
                                 data-bs-target="#pagoParcialModal{{ cuota.id_cuota }}"
-                                data-monto-pendiente="{{ cuota.monto_pendiente + cuota.calcular_interes_diario() }}"
+                                data-monto-pendiente="{{ cuota.monto_pendiente if cuota.monto_pendiente is not none else cuota.monto }}"
                                 data-interes-pendiente="{{ cuota.calcular_interes_diario() }}">
                                 <i class="fas fa-money-bill-wave me-1"></i>
                                 Pagar
