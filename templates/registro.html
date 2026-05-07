@@ -10,14 +10,6 @@
             </h2>
         </div>
         <div class="card-body p-4">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">{{ message }}</div>
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
-
             <form method="POST" action="{{ url_for('nuevo_cliente') }}" id="clienteForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <!-- Datos Personales -->

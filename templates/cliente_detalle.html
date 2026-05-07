@@ -48,8 +48,8 @@
                                 <li class="mb-2"><strong>Monto:</strong> ${{ prestamo.monto_prestado }}</li>
                                 <li class="mb-2"><strong>Interés:</strong> {{ prestamo.tasa_interes }}%</li>
                                 <li class="mb-2"><strong>Cuotas totales:</strong> {{ prestamo.cuotas_totales }}</li>
-                                <li class="mb-2"><strong>Cuotas pendientes:</strong> {{ prestamo.cuotas_pendientes }}
-                                </li>
+                                <li class="mb-2"><strong>Cuotas pendientes:</strong> {{ prestamo.cuotas_pendientes }}</li>
+                                <li class="mb-2"><strong>Monto adeudado:</strong> {{ prestamo.monto_adeudado | money }}</li>
                                 <li class="mb-2"><strong>Monto por cuota:</strong> ${{ prestamo.monto_cuotas }}</li>
                                 <li class="mb-2"><strong>Fecha inicio:</strong> {{
                                     prestamo.fecha_inicio.strftime('%d/%m/%Y') if prestamo.fecha_inicio else 'No
@@ -95,8 +95,12 @@
                                             else 'No establecida' }}</td>
                                         <td>${{ cuota.monto }}</td>
                                         <td>
-                                            {% if cuota.estado == 'PAGADA' %}
+                                            {% if cuota.estado.name == 'PAGADA' %}
                                             <span class="badge bg-success">Pagada</span>
+                                            {% elif cuota.estado.name == 'PAGO_PARCIAL' %}
+                                            <span class="badge bg-info text-dark">Pago parcial</span>
+                                            {% elif cuota.estado.name == 'JUDICIAL' %}
+                                            <span class="badge bg-dark">Judicial</span>
                                             {% else %}
                                             <span class="badge bg-warning">Pendiente</span>
                                             {% endif %}

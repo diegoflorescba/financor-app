@@ -12,6 +12,7 @@ from sqlalchemy import or_, inspect, text, func
 import locale
 import json
 import traceback
+import time
 from docx import Document
 from docx.shared import Pt
 from flask_login import LoginManager, login_required, current_user, login_user, logout_user
@@ -37,7 +38,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Configuración de sesión
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # Reducido a 30 minutos
-app.config['SESSION_COOKIE_SECURE'] = True  # Solo HTTPS
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(minutes=30)  # Duración del "recordarme"
@@ -73,15 +74,6 @@ def utility_processor():
 # Suprimir advertencias de SSL inseguro
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-# Configuración más segura para producción
-app.config.update(
-    SECRET_KEY='tu_clave_secreta_aqui',
-    SQLALCHEMY_DATABASE_URI='sqlite:///' + os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'data', 'prestamos.db'),
-    SQLALCHEMY_TRACK_MODIFICATIONS=False,
-    SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-)
 
 # Asegurarse de que el directorio data existe
 os.makedirs(os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'data'), exist_ok=True)
@@ -96,10 +88,59 @@ with app.app_context():
 # Configuración de la API BCRA
 BCRA_API_URL = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/{}"
 BCRA_API_URL_HISTORICA = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/{}"
+BCRA_API_URL_CHEQUES = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/ChequesRechazados/{}"
+BCRA_HTTP_HEADERS = {
+    'Accept': 'application/json',
+    'Connection': 'close',
+    'User-Agent': 'prestamos-app/1.0'
+}
 
 def format_money(amount):
     """Formatea números en formato español manualmente"""
     return "{:,.2f}".format(amount).replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def safe_set_locale(category, *candidates):
+    for candidate in candidates:
+        try:
+            locale.setlocale(category, candidate)
+            return True
+        except locale.Error:
+            continue
+    return False
+
+
+def validar_identificacion_bcra(identificacion):
+    identificacion = (identificacion or '').strip()
+    if not identificacion:
+        raise ValueError("Por favor ingrese un CUIT/CUIL/CDI.")
+    if not identificacion.isdigit():
+        raise ValueError("La identificación debe contener solo números, sin guiones.")
+    if len(identificacion) != 11:
+        raise ValueError("La consulta BCRA requiere un CUIT/CUIL/CDI de 11 dígitos.")
+    return identificacion
+
+
+def consultar_api_bcra(url, descripcion, reintentos=3, timeout=15):
+    ultimo_error = None
+
+    for intento in range(1, reintentos + 1):
+        try:
+            response = requests.get(url, headers=BCRA_HTTP_HEADERS, timeout=timeout)
+            return response
+        except requests.RequestException as exc:
+            ultimo_error = exc
+            app.logger.warning(
+                "Fallo consulta BCRA (%s), intento %s/%s: %s",
+                descripcion,
+                intento,
+                reintentos,
+                exc
+            )
+            if intento < reintentos:
+                time.sleep(1)
+
+    raise ultimo_error
 
 @app.route('/')
 def root():
@@ -155,144 +196,16 @@ def nuevo_cliente():
 
 
 @app.route('/registro', methods=['GET', 'POST'])
+@login_required
 def registro():
-    if request.method == 'POST':
-        try:
-            # Verificar si ya existe un cliente con ese DNI
-            dni = request.form['dni']
-            cliente_existente = Cliente.query.filter_by(dni=dni).first()
-            if cliente_existente:
-                flash('Ya existe un cliente registrado con ese DNI', 'error')
-                return redirect(url_for('registro'))
-
-            # Crear cliente
-            nuevo_cliente = Cliente(
-                nombre=request.form['nombre'],
-                apellido=request.form['apellido'],
-                dni=dni,
-                telefono=request.form['telefono'],
-                correo_electronico=request.form['correo_electronico'],
-                direccion=request.form['direccion']
-            )
-            db.session.add(nuevo_cliente)
-            db.session.flush()  # Para obtener el id_cliente
-
-            # Si se incluye préstamo
-            if 'tiene_prestamo' in request.form:
-                fecha_inicio = datetime.strptime(request.form['fecha_inicio'], '%Y-%m-%d')
-                fecha_primera_cuota = datetime.strptime(request.form['fecha_vencimiento_primera_cuota'], '%Y-%m-%d')
-                dia_vencimiento = fecha_primera_cuota.day
-
-                # Usar los valores ingresados directamente
-                monto_prestado = float(request.form['monto_prestado'])
-                monto_cuota = float(request.form['monto_cuotas'])
-                cuotas_totales = int(request.form['cuotas_totales'])
-                tasa_interes = float(request.form['tasa_interes'])
-                
-                # Calcular monto total basado en cuotas y monto por cuota
-                monto_total = monto_cuota * cuotas_totales
-
-                # Crear el préstamo
-                nuevo_prestamo = Prestamo(
-                    id_cliente=nuevo_cliente.id_cliente,
-                    monto_prestado=monto_prestado,
-                    tasa_interes=tasa_interes,  # Solo informativo
-                    cuotas_totales=cuotas_totales,
-                    cuotas_pendientes=cuotas_totales,
-                    monto_cuotas=monto_cuota,
-                    monto_adeudado=monto_total,
-                    fecha_inicio=fecha_inicio,
-                    fecha_finalizacion=fecha_primera_cuota + relativedelta(months=cuotas_totales-1),
-                    estado=EstadoPrestamo.ACTIVO
-                )
-
-                db.session.add(nuevo_prestamo)
-                db.session.flush()
-
-                # Crear las cuotas
-                hoy = datetime.now().date()
-                cuotas_pagadas = 0
-                monto_pagado = 0
-
-                for i in range(cuotas_totales):
-                    # Calcular fecha de vencimiento manteniendo el mismo día
-                    if i == 0:
-                        fecha_vencimiento = fecha_primera_cuota
-                    else:
-                        # Usar relativedelta para mantener el mismo día del mes
-                        fecha_vencimiento = fecha_primera_cuota + relativedelta(months=i)
-                        # Asegurar que se mantenga el día de vencimiento
-                        fecha_vencimiento = fecha_vencimiento.replace(day=dia_vencimiento)
-                    
-                    # Verificar si la cuota ya venció
-                    esta_pagada = fecha_vencimiento.date() < hoy
-                    
-                    nueva_cuota = Cuota(
-                        id_prestamo=nuevo_prestamo.id_prestamo,
-                        numero_cuota=i + 1,
-                        fecha_vencimiento=fecha_vencimiento,
-                        monto=monto_cuota,
-                        monto_pagado=monto_cuota if esta_pagada else 0.0,
-                        monto_pendiente=0.0 if esta_pagada else monto_cuota,
-                        pagada=esta_pagada,
-                        estado=EstadoCuota.PAGADA if esta_pagada else EstadoCuota.PENDIENTE,
-                        fecha_pago=datetime.now() if esta_pagada else None
-                    )
-                    
-                    if esta_pagada:
-                        cuotas_pagadas += 1
-                        monto_pagado += monto_cuota
-                    
-                    db.session.add(nueva_cuota)
-
-                # Actualizar el préstamo con las cuotas pagadas
-                nuevo_prestamo.cuotas_pendientes = cuotas_totales - cuotas_pagadas
-                nuevo_prestamo.monto_adeudado = monto_total - monto_pagado
-
-                # Si todas las cuotas están pagadas, marcar el préstamo como finalizado
-                if cuotas_pagadas == cuotas_totales:
-                    nuevo_prestamo.estado = EstadoPrestamo.FINALIZADO
-                    nuevo_prestamo.fecha_finalizacion = datetime.now()
-
-                # Procesar garante si está incluido
-                if 'tiene_garante' in request.form:
-                    dni_garante = request.form['dni_garante']
-                    garante = Garante.query.filter_by(dni=dni_garante).first()
-
-                    if not garante:
-                        # Crear nuevo garante
-                        garante = Garante(
-                            nombre=request.form['nombre_garante'],
-                            apellido=request.form['apellido_garante'],
-                            dni=dni_garante,
-                            telefono=request.form.get('telefono_garante', ''),
-                            correo_electronico=request.form.get('correo_garante', ''),
-                            direccion=request.form.get('direccion_garante', ''),
-                            documentacion_verificada=True,
-                            activo=True
-                        )
-                        db.session.add(garante)
-                        db.session.flush()
-
-                    nuevo_prestamo.id_garante = garante.id_garante
-
-            db.session.commit()
-            flash('Cliente registrado exitosamente', 'success')
-            return redirect(url_for('clientes'))
-
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Error al registrar cliente: {str(e)}', 'error')
-            return redirect(url_for('registro'))
-
-    return render_template('registro.html')
+    return redirect(url_for('nuevo_cliente'))
 
 
 @app.route('/reportes')
 @user_required
 def reportes():
     # Configurar el locale en español
-    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+    safe_set_locale(locale.LC_TIME, 'es_ES.UTF-8', 'es_ES', 'Spanish_Spain.1252')
     
     # Obtener fecha actual y siguiente
     fecha_actual = datetime.now()
@@ -368,7 +281,7 @@ def reportes():
 @user_required
 def cuotas_a_vencer():
     # Configurar el locale en español
-    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+    safe_set_locale(locale.LC_TIME, 'es_ES.UTF-8', 'es_ES', 'Spanish_Spain.1252')
     
     today = date.today()
     # Capitalizar la primera letra del mes
@@ -432,6 +345,7 @@ def editar_cliente(id):
 
 
 @app.route('/exportar_excel')
+@user_required
 def exportar_excel():
     try:
         # Obtener el mes actual
@@ -526,7 +440,7 @@ def pagar_cuota(cuota_id):
             usuario_id=current_user.id
         )
         prestamo = cuota.prestamo
-        prestamo.monto_adeudado = sum((c.monto_pendiente or 0) for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
+        prestamo.recalcular_resumen()
         db.session.commit()
         flash('Cuota pagada exitosamente', 'success')
     except Exception as e:
@@ -596,7 +510,9 @@ def prestamos():
     return render_template('prestamos.html', clientes=clientes, active_page='prestamos')
 
 
-@app.route('/crear_prestamo', methods=['POST'])
+# Ruta desactivada: el flujo vigente de carga usa /guardar_prestamo desde cargar_prestamo.html.
+# Se conserva el código temporalmente por si hace falta comparar lógica antes de eliminarlo.
+# @app.route('/crear_prestamo', methods=['POST'])
 @login_required
 @admin_required
 def crear_prestamo():
@@ -799,6 +715,8 @@ def recrear_cuotas(prestamo_id):
 
 
 @app.route('/ver_cuotas/<int:prestamo_id>')
+@login_required
+@admin_required
 def ver_cuotas(prestamo_id):
     prestamo = Prestamo.query.get_or_404(prestamo_id)
     cuotas = Cuota.query.filter_by(
@@ -836,18 +754,27 @@ def consultar_bcra():
 
     if request.method == 'POST':
         try:
-            identificacion = request.form.get('identificacion')
-            if not identificacion:
-                raise ValueError("Por favor ingrese una identificación")
+            identificacion = validar_identificacion_bcra(request.form.get('identificacion'))
 
             # Consulta deudas (principal)
-            response = requests.get(BCRA_API_URL.format(identificacion), verify=False)
+            response = consultar_api_bcra(
+                BCRA_API_URL.format(identificacion),
+                'deudas actuales'
+            )
             
             if response.status_code != 200:
-                raise Exception(f"Error en la consulta principal: {response.status_code}")
+                try:
+                    error_data = response.json()
+                    detalle_error = ', '.join(error_data.get('errorMessages', []))
+                except Exception:
+                    detalle_error = response.text or f"HTTP {response.status_code}"
+                raise ValueError(f"Error en la consulta principal BCRA: {detalle_error}")
 
             # Consulta histórica
-            response_historica = requests.get(BCRA_API_URL_HISTORICA.format(identificacion), verify=False)
+            response_historica = consultar_api_bcra(
+                BCRA_API_URL_HISTORICA.format(identificacion),
+                'histórico de deudas'
+            )
             situacion_historica = None
             fecha_situacion = None
             
@@ -928,18 +855,13 @@ def consultar_bcra():
 
             # Consulta cheques (secundaria)
             try:
-                # Construir URL específica para cheques rechazados
-                base_url = "https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/"
-                cheques_url = f"{base_url}ChequesRechazados/{identificacion}"
-                print(f"URL de consulta cheques: {cheques_url}")  # Debug
-                
-                response_cheques = requests.get(cheques_url, verify=False)
-                print(f"Status code cheques: {response_cheques.status_code}")  # Debug
-                print(f"Respuesta completa: {response_cheques.text}")  # Debug
+                response_cheques = consultar_api_bcra(
+                    BCRA_API_URL_CHEQUES.format(identificacion),
+                    'cheques rechazados'
+                )
                 
                 if response_cheques.status_code == 200:
                     data_cheques = response_cheques.json()
-                    print(f"Data cheques parseada: {data_cheques}")  # Debug
                     
                     # Verificar la estructura completa de la respuesta
                     if ('results' in data_cheques and 
@@ -948,14 +870,8 @@ def consultar_bcra():
                         
                         cheques_detalles = []
                         for causal in data_cheques['results']['causales']:
-                            print(f"Procesando causal: {causal}")  # Debug
-                            
                             for entidad in causal.get('entidades', []):
-                                print(f"Procesando entidad: {entidad}")  # Debug
-                                
                                 for detalle in entidad.get('detalle', []):
-                                    print(f"Procesando detalle: {detalle}")  # Debug
-                                    
                                     cheques_detalles.append({
                                         'entidad': entidad['entidad'],
                                         'causal': causal['causal'],
@@ -974,24 +890,26 @@ def consultar_bcra():
                                 'identificacion': data_cheques['results'].get('identificacion', ''),
                                 'detalles': cheques_detalles
                             }
-                            print(f"Resultado cheques final: {resultado_cheques}")  # Debug
-                        else:
-                            print("No se encontraron detalles de cheques")  # Debug
-                    else:
-                        print("Estructura de respuesta inválida o sin datos de cheques")  # Debug
-                        print(f"Estructura de data_cheques: {data_cheques}")  # Debug
-                else:
-                    print(f"Error en la consulta de cheques: Status {response_cheques.status_code}")
-                    print(f"Respuesta de error: {response_cheques.text}")  # Debug
+                elif response_cheques.status_code not in (404,):
+                    app.logger.warning(
+                        'Consulta BCRA cheques devolvio status %s: %s',
+                        response_cheques.status_code,
+                        response_cheques.text
+                    )
                 
             except Exception as e:
-                print(f"Error en consulta de cheques: {str(e)}")
-                print(f"Tipo de error: {type(e)}")
-                import traceback
-                traceback.print_exc()  # Esto imprimirá el stack trace completo
+                app.logger.warning('Error en consulta de cheques BCRA: %s', e)
 
         except ValueError as ve:
             error = str(ve)
+        except requests.Timeout:
+            error = 'La API del BCRA tardó demasiado en responder. Probá nuevamente en unos segundos.'
+        except requests.ConnectionError as e:
+            error = (
+                'No se pudo establecer una conexión estable con la API del BCRA. '
+                'Puede ser una caída temporal del servicio o un corte de conexión del lado del BCRA.'
+            )
+            app.logger.warning('Error de conexión BCRA: %s', e)
         except requests.RequestException as e:
             error = f"Error de conexión: {str(e)}"
         except Exception as e:
@@ -1183,10 +1101,6 @@ def guardar_prestamo():
             nuevo_prestamo.id_garante = id_garante
             app.logger.info(f"Préstamo asociado con garante ID: {id_garante}")
 
-        app.logger.info("Haciendo commit de los cambios...")
-        # Hacer commit de todos los cambios
-        db.session.commit()
-
         app.logger.info("Registrando en el log de auditoría...")
         # Registrar la creación del préstamo en el log de auditoría
         prestamo_data = {
@@ -1225,6 +1139,9 @@ def guardar_prestamo():
                 'direccion': nuevo_garante.direccion
             }
             audit_change('create', 'garante', nuevo_garante.id_garante, changes=garante_data)
+
+        app.logger.info("Haciendo commit de los cambios...")
+        db.session.commit()
 
         app.logger.info("Préstamo y cuotas creados exitosamente")
         flash('Préstamo guardado exitosamente', 'success')
@@ -1358,37 +1275,56 @@ def actualizar_estado_cuota():
         prestamo = cuota.prestamo
 
         if pagada:
-            cuota.estado = EstadoCuota.PAGADA
-            cuota.pagada = True
-            cuota.monto_pagado = cuota.monto
-            cuota.monto_pendiente = 0.0
-            cuota.fecha_pago = datetime.now()
+            if cuota.estado == EstadoCuota.JUDICIAL:
+                return jsonify({
+                    'success': False,
+                    'error': 'Las cuotas judiciales no pueden pagarse desde este listado. Use Gestión de Préstamos.'
+                }), 400
+
+            if cuota.estado == EstadoCuota.PAGADA:
+                return jsonify({'success': True, 'estado': cuota.estado.name})
+
+            monto_restante = cuota.monto_pendiente if cuota.monto_pendiente is not None else max(
+                0, cuota.monto - (cuota.monto_pagado or 0)
+            )
+            if monto_restante <= 0:
+                return jsonify({
+                    'success': False,
+                    'error': 'La cuota no tiene saldo pendiente para registrar.'
+                }), 400
+
+            cuota.registrar_pago_con_trazabilidad(
+                monto_pagado=monto_restante,
+                interes_pagado=None,
+                tipo_pago='total',
+                nota='Pago registrado desde listado de préstamos',
+                usuario_id=current_user.id
+            )
         else:
+            if cuota.pagos:
+                return jsonify({
+                    'success': False,
+                    'error': 'La cuota ya tiene pagos registrados. Use Gestión de Préstamos para corregirla sin perder trazabilidad.'
+                }), 400
             cuota.estado = EstadoCuota.PENDIENTE
             cuota.pagada = False
             cuota.monto_pagado = 0.0
             cuota.monto_pendiente = cuota.monto
             cuota.fecha_pago = None
+            cuota.proceso_judicial = False
 
-        prestamo.cuotas_pendientes = sum(
-            1 for c in prestamo.cuotas
-            if c.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]
-        )
-        prestamo.monto_adeudado = sum(
-            (c.monto_pendiente or 0) for c in prestamo.cuotas
-            if c.estado != EstadoCuota.PAGADA
-        )
-
-        if prestamo.cuotas_pendientes == 0 and prestamo.estado != EstadoPrestamo.JUDICIAL:
-            prestamo.estado = EstadoPrestamo.FINALIZADO
-            prestamo.fecha_finalizacion = datetime.now()
-        elif prestamo.cuotas_pendientes > 0 and prestamo.estado == EstadoPrestamo.FINALIZADO:
-            prestamo.estado = EstadoPrestamo.ACTIVO
-            prestamo.fecha_finalizacion = None
+        prestamo.recalcular_resumen()
+        audit_change('update', 'cuota', cuota.id_cuota, changes={
+            'estado': cuota.estado.name,
+            'monto_pagado': cuota.monto_pagado,
+            'monto_pendiente': cuota.monto_pendiente,
+            'fecha_pago': cuota.fecha_pago.strftime('%Y-%m-%d %H:%M:%S') if cuota.fecha_pago else None
+        })
 
         db.session.commit()
         return jsonify({
             'success': True,
+            'estado': cuota.estado.name,
             'cuotas_pendientes': prestamo.cuotas_pendientes,
             'monto_adeudado': prestamo.monto_adeudado
         })
@@ -1444,10 +1380,11 @@ def admin():
 def test_bcra(cuit):
     try:
         # Construir la URL con el CUIT
-        url = BCRA_API_URL.format(cuit)
+        identificacion = validar_identificacion_bcra(cuit)
+        url = BCRA_API_URL.format(identificacion)
         
         # Realizar la consulta
-        response = requests.get(url, verify=False)
+        response = consultar_api_bcra(url, 'test manual')
         
         # Obtener el JSON completo
         data = response.json()
@@ -1512,6 +1449,7 @@ def actualizar_fechas_prestamo(id_prestamo):
     return redirect(url_for('prestamos'))
 
 @app.route('/generar_contrato/<int:prestamo_id>')
+@user_required
 def generar_contrato(prestamo_id):
     try:
         # Intentar configurar el locale para español
@@ -1525,7 +1463,7 @@ def generar_contrato(prestamo_id):
                     locale.setlocale(locale.LC_ALL, 'Spanish_Spain.1252')
                 except locale.Error:
                     # Si ningún locale español está disponible, usar el locale por defecto
-                    locale.setlocale(locale.LC_ALL, '')
+                    safe_set_locale(locale.LC_ALL, '')
         
         # Obtener datos
         prestamo = Prestamo.query.get_or_404(prestamo_id)
@@ -1637,6 +1575,7 @@ def obtener_primer_dia_habil(fecha):
     return primer_dia
 
 @app.route('/generar_pagare/<int:prestamo_id>')
+@user_required
 def generar_pagare(prestamo_id):
     try:
         # Intentar configurar el locale para español
@@ -1650,7 +1589,7 @@ def generar_pagare(prestamo_id):
                     locale.setlocale(locale.LC_ALL, 'Spanish_Spain.1252')
                 except locale.Error:
                     # Si ningún locale español está disponible, usar el locale por defecto
-                    locale.setlocale(locale.LC_ALL, '')
+                    safe_set_locale(locale.LC_ALL, '')
         
         # Obtener datos
         prestamo = Prestamo.query.get_or_404(prestamo_id)
@@ -1950,7 +1889,7 @@ def pago_parcial(cuota_id):
             usuario_id=current_user.id
         )
         prestamo = cuota.prestamo
-        prestamo.monto_adeudado = sum((c.monto_pendiente or 0) for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
+        prestamo.recalcular_resumen()
         db.session.commit()
         flash('Pago registrado exitosamente', 'success')
     except Exception as e:
@@ -1982,7 +1921,7 @@ def ajuste_manual(cuota_id):
             usuario_id=current_user.id
         )
         prestamo = cuota.prestamo
-        prestamo.monto_adeudado = sum((c.monto_pendiente or 0) for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
+        prestamo.recalcular_resumen()
         db.session.commit()
         flash('Ajuste manual registrado exitosamente', 'success')
     except Exception as e:
@@ -2035,10 +1974,16 @@ def gestionar_prestamos():
             if cuota.estado != nuevo_estado_enum:
                 cambios['estado'] = {'de': cuota.estado.name, 'a': nuevo_estado_enum.name}
                 cuota.estado = nuevo_estado_enum
-                
-                # Si la cuota se marca como JUDICIAL, actualizar proceso_judicial
-                if nuevo_estado_enum == EstadoCuota.JUDICIAL:
+
+                if nuevo_estado_enum == EstadoCuota.PAGADA:
+                    cuota.pagada = True
+                    cuota.proceso_judicial = False
+                elif nuevo_estado_enum == EstadoCuota.JUDICIAL:
+                    cuota.pagada = False
                     cuota.proceso_judicial = True
+                else:
+                    cuota.pagada = False
+                    cuota.proceso_judicial = False
             
             # Actualizar monto de la cuota
             if monto:
@@ -2047,7 +1992,7 @@ def gestionar_prestamos():
                     cambios['monto'] = {'de': cuota.monto, 'a': monto_float}
                     cuota.monto = monto_float
                     # Actualizar monto pendiente basado en el nuevo monto
-                    cuota.monto_pendiente = monto_float - (cuota.monto_pagado or 0)
+                    cuota.monto_pendiente = max(0, monto_float - (cuota.monto_pagado or 0))
             
             # Actualizar monto pagado
             monto_pagado_float = float(monto_pagado)
@@ -2055,7 +2000,7 @@ def gestionar_prestamos():
                 cambios['monto_pagado'] = {'de': cuota.monto_pagado, 'a': monto_pagado_float}
                 cuota.monto_pagado = monto_pagado_float
                 # Actualizar monto pendiente
-                cuota.monto_pendiente = cuota.monto - monto_pagado_float
+                cuota.monto_pendiente = max(0, cuota.monto - monto_pagado_float)
             
             # Actualizar fecha de pago
             if fecha_pago:
@@ -2063,6 +2008,23 @@ def gestionar_prestamos():
                 if not cuota.fecha_pago or cuota.fecha_pago.date() != fecha_pago_dt.date():
                     cambios['fecha_pago'] = {'de': str(cuota.fecha_pago), 'a': fecha_pago}
                     cuota.fecha_pago = fecha_pago_dt
+
+            if cuota.estado == EstadoCuota.PAGADA:
+                cuota.monto_pagado = cuota.monto
+                cuota.monto_pendiente = 0.0
+                cuota.pagada = True
+                cuota.proceso_judicial = False
+                cuota.fecha_pago = cuota.fecha_pago or datetime.now()
+            elif cuota.estado == EstadoCuota.JUDICIAL:
+                cuota.pagada = False
+                cuota.proceso_judicial = True
+                cuota.fecha_pago = None
+            else:
+                cuota.pagada = False
+                cuota.proceso_judicial = False
+                cuota.monto_pendiente = max(0, cuota.monto - (cuota.monto_pagado or 0))
+                if cuota.estado == EstadoCuota.PENDIENTE and cuota.monto_pagado <= 0:
+                    cuota.fecha_pago = None
             
             # Si se marca como pagada y no existe pago, crear registro en Pago
             if nuevo_estado_enum == EstadoCuota.PAGADA and not cuota.pagos:
@@ -2079,25 +2041,10 @@ def gestionar_prestamos():
                 db.session.add(nuevo_pago)
                 cambios['pago_registrado'] = True
             
-            # Recalcular estado del préstamo
-            if all(c.estado == EstadoCuota.PAGADA for c in prestamo.cuotas):
-                if prestamo.estado != EstadoPrestamo.FINALIZADO:
-                    cambios['estado_prestamo'] = {'de': prestamo.estado.name, 'a': EstadoPrestamo.FINALIZADO.name}
-                    prestamo.estado = EstadoPrestamo.FINALIZADO
-                    prestamo.proceso_judicial = False
-            elif any(c.estado == EstadoCuota.JUDICIAL for c in prestamo.cuotas):
-                if prestamo.estado != EstadoPrestamo.JUDICIAL:
-                    cambios['estado_prestamo'] = {'de': prestamo.estado.name, 'a': EstadoPrestamo.JUDICIAL.name}
-                    prestamo.estado = EstadoPrestamo.JUDICIAL
-                    prestamo.proceso_judicial = True
-            else:
-                if prestamo.estado != EstadoPrestamo.ACTIVO:
-                    cambios['estado_prestamo'] = {'de': prestamo.estado.name, 'a': EstadoPrestamo.ACTIVO.name}
-                    prestamo.estado = EstadoPrestamo.ACTIVO
-                    prestamo.proceso_judicial = False
-            
-            # Recalcular monto adeudado del préstamo
-            prestamo.monto_adeudado = sum((c.monto_pendiente or 0) for c in prestamo.cuotas if c.estado != EstadoCuota.PAGADA)
+            estado_anterior = prestamo.estado
+            prestamo.recalcular_resumen()
+            if prestamo.estado != estado_anterior:
+                cambios['estado_prestamo'] = {'de': estado_anterior.name, 'a': prestamo.estado.name}
             
             # Log de auditoría
             audit_change('update', 'cuota', cuota.id_cuota, changes=cambios)
@@ -2115,8 +2062,9 @@ def gestionar_prestamos():
 
 if __name__ == '__main__':
     print("Iniciando servidor de desarrollo...")
-    app.run(debug=True)
+    host = os.environ.get('HOST', '127.0.0.1')
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host=host, port=port, debug=True)
 else:
     # En producción, no intentar iniciar el servidor
     print("Iniciando en modo producción")
-

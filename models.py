@@ -152,27 +152,50 @@ class Prestamo(db.Model):
         """Marca el préstamo y sus cuotas pendientes como judiciales, actualizando el monto adeudado"""
         self.estado = EstadoPrestamo.JUDICIAL
         self.proceso_judicial = True
-        monto_adeudado = 0
         for cuota in self.cuotas:
             if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]:
                 cuota.estado = EstadoCuota.JUDICIAL
                 cuota.pagada = False
                 cuota.proceso_judicial = True
-                monto_adeudado += (cuota.monto_pendiente or cuota.monto)
-        self.monto_adeudado = monto_adeudado
+        self.recalcular_resumen()
 
     def verificar_estado(self):
         """Verifica y actualiza el estado del préstamo basado en sus cuotas"""
-        if self.estado == EstadoPrestamo.JUDICIAL:
-            return
-
-        todas_pagadas = all(cuota.estado == EstadoCuota.PAGADA for cuota in self.cuotas)
-        if todas_pagadas and self.cuotas:
-            self.estado = EstadoPrestamo.FINALIZADO
-            self.fecha_finalizacion = datetime.now()
+        self.recalcular_resumen()
 
     def actualizar_cuotas_pendientes(self):
-        self.cuotas_pendientes = sum(1 for cuota in self.cuotas if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL])
+        self.cuotas_pendientes = sum(
+            1 for cuota in self.cuotas if cuota.estado in [EstadoCuota.PENDIENTE, EstadoCuota.PAGO_PARCIAL]
+        )
+
+    def recalcular_resumen(self):
+        """Sincroniza importes y estado general del préstamo a partir de sus cuotas."""
+        self.actualizar_cuotas_pendientes()
+        self.monto_adeudado = sum(
+            (cuota.monto_pendiente if cuota.monto_pendiente is not None else cuota.monto)
+            for cuota in self.cuotas
+            if cuota.estado != EstadoCuota.PAGADA
+        )
+
+        tiene_judiciales = any(
+            cuota.estado == EstadoCuota.JUDICIAL or cuota.proceso_judicial for cuota in self.cuotas
+        )
+        if tiene_judiciales:
+            self.estado = EstadoPrestamo.JUDICIAL
+            self.proceso_judicial = True
+            self.fecha_finalizacion = None
+            return
+
+        if self.cuotas and all(cuota.estado == EstadoCuota.PAGADA for cuota in self.cuotas):
+            self.estado = EstadoPrestamo.FINALIZADO
+            self.proceso_judicial = False
+            if not self.fecha_finalizacion:
+                self.fecha_finalizacion = datetime.now()
+            return
+
+        self.estado = EstadoPrestamo.ACTIVO
+        self.proceso_judicial = False
+        self.fecha_finalizacion = None
 
     def __repr__(self):
         return f'<Prestamo {self.id_prestamo} - Cliente {self.id_cliente}>'
@@ -245,7 +268,7 @@ class Cuota(db.Model):
         if nota_ajuste:
             self.nota_ajuste = nota_ajuste
 
-        self.prestamo.actualizar_cuotas_pendientes()
+        self.prestamo.recalcular_resumen()
 
     def registrar_pago(self, monto_pagado):
         """Registra un pago en la cuota y actualiza su estado"""
@@ -266,8 +289,7 @@ class Cuota(db.Model):
             self.pagada = False
             self.fecha_pago = datetime.now()
 
-        self.prestamo.verificar_estado()
-        self.prestamo.actualizar_cuotas_pendientes()
+        self.prestamo.recalcular_resumen()
 
     def registrar_pago_con_trazabilidad(self, monto_pagado, interes_pagado=None, tipo_pago='parcial', nota=None, usuario_id=None):
         """Registra un pago con trazabilidad completa en la tabla de pagos"""
@@ -301,8 +323,7 @@ class Cuota(db.Model):
             self.pagada = False
             self.fecha_pago = datetime.now()
 
-        self.prestamo.actualizar_cuotas_pendientes()
-        self.prestamo.verificar_estado()
+        self.prestamo.recalcular_resumen()
 
         return pago
 

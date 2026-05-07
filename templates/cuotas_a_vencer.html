@@ -75,9 +75,9 @@
                     <td>{{ cuota.numero_cuota }}/{{ cuota.prestamo.cuotas_totales }}</td>
                     <td>{{ cuota.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
                     <td class="text-end">${{ "{:.2f}".format(cuota.monto).replace(',', '.') }}</td>
-                    <td class="text-end">$0.00</td>
+                    {% set interes_calculado = cuota.calcular_interes_diario() %}
+                    <td class="text-end">${{ "{:.2f}".format(interes_calculado).replace(',', '.') }}</td>
                     <td class="text-end">
-                        {% set interes_calculado = cuota.calcular_interes_diario() %}
                         {% if cuota.estado.value == 'PAGO_PARCIAL' %}
                         <span class="badge bg-info">Pago Parcial</span>
                         ${{ '{:,.2f}'.format(cuota.monto_pagado).replace(',', '.') }} / ${{
@@ -163,7 +163,7 @@
                                     </div>
                                     <div class="form-check mb-3">
                                         <input class="form-check-input" type="checkbox" name="marcar_pagada"
-                                            id="marcar_pagada_{{ cuota.id_cuota }}">
+                                            id="marcar_pagada_{{ cuota.id_cuota }}" checked>
                                         <label class="form-check-label" for="marcar_pagada_{{ cuota.id_cuota }}">
                                             Marcar como Cuota Pagada
                                         </label>

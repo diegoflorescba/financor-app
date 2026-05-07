@@ -269,14 +269,16 @@
             .then(data => {
                 if (data.success) {
                     const estadoElement = document.getElementById(`estado-cuota-${idCuota}`);
-                    estadoElement.textContent = pagada ? 'Pagada' : 'Pendiente';
+                    estadoElement.textContent = data.estado || (pagada ? 'PAGADA' : 'PENDIENTE');
                     estadoElement.className = `badge ${pagada ? 'bg-success' : 'bg-danger'}`;
                 } else {
-                    alert('Error al actualizar el estado de la cuota');
+                    alert(data.error || 'Error al actualizar el estado de la cuota');
+                    document.getElementById(`cuota-${idCuota}`).checked = !pagada;
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
+                document.getElementById(`cuota-${idCuota}`).checked = !pagada;
                 alert('Error al actualizar el estado de la cuota');
             });
     }

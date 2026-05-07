@@ -25,6 +25,9 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and user.check_password(password):
+            if not user.is_active:
+                flash('El usuario está desactivado. Contacte al administrador.', 'error')
+                return render_template('auth/login.html')
             login_user(user, remember=remember)  # Usar el valor de remember
             user.last_login = datetime.utcnow()
             db.session.commit()
@@ -134,10 +137,11 @@ def create_user():
         new_user.set_password(password)
 
         db.session.add(new_user)
+        db.session.flush()
+        audit_change('create', 'user', new_user.id)
         db.session.commit()
 
         print(f"Usuario creado exitosamente: {new_user.username}")  # Debug log
-        audit_change('create', 'user', new_user.id)
         return jsonify({
             'success': True,
             'message': 'Usuario creado exitosamente'
@@ -183,9 +187,8 @@ def toggle_user_status(user_id):
         
         user.is_active = not user.is_active
         user.updated_by = current_user.id
-        db.session.commit()
-        
         audit_change('update', 'user', user.id)
+        db.session.commit()
         return jsonify({'success': True})
         
     except Exception as e:
@@ -217,9 +220,8 @@ def update_user():
             user.set_password(password)
             
         user.updated_by = current_user.id
-        db.session.commit()
-        
         audit_change('update', 'user', user.id)
+        db.session.commit()
         flash('Usuario actualizado exitosamente', 'success')
         
     except Exception as e:

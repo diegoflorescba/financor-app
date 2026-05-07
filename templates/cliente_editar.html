@@ -6,14 +6,6 @@
         <div class="card-body">
             <h3 class="card-title mb-4">Editar Cliente</h3>
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">{{ message }}</div>
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
-
             <form method="POST" class="needs-validation" novalidate>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <!-- Datos del Cliente -->
