@@ -78,9 +78,6 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 # Asegurarse de que el directorio data existe
 os.makedirs(os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'data'), exist_ok=True)
 
-# Inicializar la base de datos
-db.init_app(app)
-
 # Crear las tablas si no existen
 with app.app_context():
     db.create_all()
