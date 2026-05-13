@@ -1471,31 +1471,59 @@ def generar_contrato(prestamo_id):
         cliente = prestamo.cliente
         garante = Garante.query.get(prestamo.id_garante) if prestamo.id_garante else None
         
-        # Cargar el template
-        doc = Document('templates/template_mutuo.docx')
-        
         # Fecha de firma del mutuo (día y mes para rellenar en el docx)
         fecha_firma_mutuo = datetime.now()
         dia_mutuo = str(fecha_firma_mutuo.day)
         mes_letra_mutuo = fecha_firma_mutuo.strftime('%B').capitalize()
-        
-        # Crear diccionario con todos los reemplazos
+        cuotas = Cuota.query.filter_by(id_prestamo=prestamo_id).order_by(Cuota.numero_cuota).all()
+        fecha_primera_cuota = cuotas[0].fecha_vencimiento.strftime('%d/%m/%Y') if cuotas else ''
+
+        monto_total_a_devolver = prestamo.monto_cuotas * prestamo.cuotas_totales
+        interes_total = max(0, monto_total_a_devolver - prestamo.monto_prestado)
+        interes_mensual = (
+            (interes_total / prestamo.monto_prestado / prestamo.cuotas_totales) * 100
+            if prestamo.monto_prestado and prestamo.cuotas_totales
+            else 0
+        )
+        tna = interes_mensual * 12
+
+        def format_percent(value):
+            return f"{value:.2f}%".replace('.', ',')
+
+        # Crear diccionario con todos los reemplazos. Incluye alias para tolerar acentos
+        # y pequeñas variaciones de nombres en el template del mutuo.
         replacements = {
             '{fecha_actual}': fecha_firma_mutuo.strftime('%d/%m/%Y'),
             '{dia_mutuo}': dia_mutuo,
             '{mes_letra_mutuo}': mes_letra_mutuo,
+            '{dia_firma_pagare}': dia_mutuo,
+            '{mes_firma_pagare}': mes_letra_mutuo,
+            '{ano_pagare}': str(fecha_firma_mutuo.year),
+            '{ano_pagare_letras}': numero_a_letras(fecha_firma_mutuo.year),
             '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
             '{dni}': cliente.dni,
             '{domicilio}': cliente.direccion or '',
             '{telefono}': cliente.telefono or '',
+            '{teléfono}': cliente.telefono or '',
+            '{correo_electronico}': cliente.correo_electronico or '',
             '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
+            '{monto prestado}': f"${format_money(prestamo.monto_prestado)}",
             '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado),
             '{cantidad_cuotas}': str(prestamo.cuotas_totales),
             '{cantidad_cuotas_letras}': numero_a_letras(prestamo.cuotas_totales),
             '{monto_cuota}': f"${format_money(prestamo.monto_cuotas)}",
             '{monto_cuota_letras}': numero_a_letras(prestamo.monto_cuotas),
-            '{fecha_primera_cuota}': prestamo.cuotas[0].fecha_vencimiento.strftime('%d/%m/%Y') if prestamo.cuotas else '',
+            '{fecha_primera_cuota}': fecha_primera_cuota,
+            '{fecha_primer_cuota}': fecha_primera_cuota,
+            '{interes_mensual}': format_percent(interes_mensual),
+            '{TNA}': format_percent(tna),
+            '{CFT}': format_percent(tna),
         }
+
+        for numero_cuota in range(1, max(prestamo.cuotas_totales, 60) + 1):
+            replacements[f'{{fecha_cuota_{numero_cuota}}}'] = ''
+        for cuota in cuotas:
+            replacements[f'{{fecha_cuota_{cuota.numero_cuota}}}'] = cuota.fecha_vencimiento.strftime('%d/%m/%Y')
         
         # Siempre definir placeholders del garante (con datos o vacío si no hay garante)
         if garante:
@@ -1503,58 +1531,97 @@ def generar_contrato(prestamo_id):
                 '{nombre_apellido_garante}': f"{garante.nombre} {garante.apellido}",
                 '{dni_garante}': garante.dni or '',
                 '{domicilio_garante}': garante.direccion or '',
-                '{telefono_garante}': garante.telefono or ''
+                '{telefono_garante}': garante.telefono or '',
+                '{correo_electronico_garante}': garante.correo_electronico or ''
             })
         else:
             replacements.update({
                 '{nombre_apellido_garante}': '',
                 '{dni_garante}': '',
                 '{domicilio_garante}': '',
-                '{telefono_garante}': ''
+                '{telefono_garante}': '',
+                '{correo_electronico_garante}': ''
             })
 
-        def reemplazar_en_parrafo(paragraph):
-            for key, value in replacements.items():
+        def reemplazar_en_parrafo(paragraph, valores):
+            for key, value in valores.items():
                 if key in paragraph.text:
                     paragraph.text = paragraph.text.replace(key, value)
 
-        def reemplazar_en_tabla(table):
+        def reemplazar_en_tabla(table, valores):
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
-                        reemplazar_en_parrafo(paragraph)
+                        reemplazar_en_parrafo(paragraph, valores)
 
-        # Reemplazar en párrafos del cuerpo
-        for paragraph in doc.paragraphs:
-            reemplazar_en_parrafo(paragraph)
-        # Reemplazar en tablas del cuerpo
-        for table in doc.tables:
-            reemplazar_en_tabla(table)
-        # Reemplazar en encabezados y pies de cada sección
-        for section in doc.sections:
-            for paragraph in section.header.paragraphs:
-                reemplazar_en_parrafo(paragraph)
-            for table in section.header.tables:
-                reemplazar_en_tabla(table)
-            for paragraph in section.footer.paragraphs:
-                reemplazar_en_parrafo(paragraph)
-            for table in section.footer.tables:
-                reemplazar_en_tabla(table)
+        def ajustar_tabla_cuotas(doc):
+            for table in doc.tables:
+                texto_tabla = ' '.join(cell.text for row in table.rows for cell in row.cells)
+                if '{fecha_cuota_' not in texto_tabla:
+                    continue
+                if not table.rows or len(table.rows[0].cells) < 3:
+                    continue
 
-        temp_path = f'temp/contrato_prestamo_{prestamo_id}.docx'
+                for row in list(table.rows)[1:]:
+                    table._tbl.remove(row._tr)
+
+                for cuota in cuotas:
+                    row = table.add_row()
+                    row.cells[0].text = str(cuota.numero_cuota)
+                    row.cells[1].text = cuota.fecha_vencimiento.strftime('%d/%m/%Y')
+                    row.cells[2].text = f"${format_money(cuota.monto)}"
+                return
+
+        def completar_mutuo(copia_para, destino):
+            doc = Document('templates/template_mutuo.docx')
+            valores = replacements.copy()
+            valores['{copia_para}'] = copia_para
+            ajustar_tabla_cuotas(doc)
+
+            for paragraph in doc.paragraphs:
+                reemplazar_en_parrafo(paragraph, valores)
+            for table in doc.tables:
+                reemplazar_en_tabla(table, valores)
+            for section in doc.sections:
+                for paragraph in section.header.paragraphs:
+                    reemplazar_en_parrafo(paragraph, valores)
+                for table in section.header.tables:
+                    reemplazar_en_tabla(table, valores)
+                for paragraph in section.footer.paragraphs:
+                    reemplazar_en_parrafo(paragraph, valores)
+                for table in section.footer.tables:
+                    reemplazar_en_tabla(table, valores)
+
+            doc.save(destino)
+
         os.makedirs('temp', exist_ok=True)
-        doc.save(temp_path)
+        archivos_generados = [
+            (f'temp/mutuo_prestamo_{prestamo_id}_titular.docx', 'TITULAR'),
+            (f'temp/mutuo_prestamo_{prestamo_id}_garante.docx', 'GARANTE'),
+        ]
+        for path, copia_para in archivos_generados:
+            completar_mutuo(copia_para, path)
+
+        zip_path = f'temp/mutuo_prestamo_{prestamo_id}.zip'
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for archivo, _ in archivos_generados:
+                zipf.write(archivo, os.path.basename(archivo))
 
         response = send_file(
-            temp_path,
+            zip_path,
             as_attachment=True,
-            download_name=f'Contrato_Prestamo_{cliente.apellido}_{prestamo_id}.docx'
+            download_name=f'Mutuo_Prestamo_{cliente.apellido}_{prestamo_id}.zip'
         )
 
         @response.call_on_close
         def cleanup():
+            for archivo, _ in archivos_generados:
+                try:
+                    os.remove(archivo)
+                except OSError:
+                    pass
             try:
-                os.remove(temp_path)
+                os.remove(zip_path)
             except OSError:
                 pass
 
@@ -1610,26 +1677,30 @@ def generar_pagare(prestamo_id):
             # Cargar el template
             doc = Document('templates/template_pagare.docx')
             
-            # Calcular la fecha del primer día hábil del mes de vencimiento
+            # Firma: primer día hábil del mes de vencimiento de la cuota.
             fecha_firma = obtener_primer_dia_habil(cuota.fecha_vencimiento)
-            # Vencimiento del pagaré: día 5 del mes correlativo (N1 → 5 del mes de la cuota 1, N2 → 5 del mes de la cuota 2, etc.)
             try:
                 locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
             except locale.Error:
                 pass
-            vencimiento_pagare = date(
-                cuota.fecha_vencimiento.year,
-                cuota.fecha_vencimiento.month,
-                5
-            )
-            dia_vencimiento_pagare = '5'
+            vencimiento_pagare = cuota.fecha_vencimiento.date()
+            dia_vencimiento_pagare = str(vencimiento_pagare.day)
             mes_vencimiento_pagare = vencimiento_pagare.strftime('%B').capitalize()
             ano_vencimiento_pagare = str(vencimiento_pagare.year)
+            vencimiento_pagare_letras = (
+                f"{numero_a_letras(vencimiento_pagare.day).lower()} de "
+                f"{mes_vencimiento_pagare.lower()}"
+            )
 
             # Crear diccionario con los reemplazos necesarios
             replacements = {
+                '{numero_cliente}': str(cliente.id_cliente),
                 '{nombre_apellido}': f"{cliente.nombre} {cliente.apellido}",
+                '{dni}': cliente.dni or '',
                 '{domicilio}': cliente.direccion or '',
+                '{telefono}': cliente.telefono or '',
+                '{teléfono}': cliente.telefono or '',
+                '{correo_electronico}': cliente.correo_electronico or '',
                 '{monto_prestado}': f"${format_money(prestamo.monto_prestado)}",
                 '{monto_prestado_letras}': numero_a_letras(prestamo.monto_prestado),
                 '{cuota_mensual_letras}': numero_a_letras(cuota.monto),
@@ -1643,22 +1714,35 @@ def generar_pagare(prestamo_id):
                 '{mes_vencimiento_pagare}': mes_vencimiento_pagare,
                 '{año_vencimiento_pagare}': ano_vencimiento_pagare,
                 '{ano_vencimiento_pagare}': ano_vencimiento_pagare,
+                '{vencimiento_pagare_letras}': vencimiento_pagare_letras,
             }
             
-            # Reemplazar en párrafos
-            for paragraph in doc.paragraphs:
+            def reemplazar_en_parrafo_pagare(paragraph):
                 for key, value in replacements.items():
                     if key in paragraph.text:
                         paragraph.text = paragraph.text.replace(key, value)
-            # Reemplazar en celdas de tablas
-            for table in doc.tables:
+
+            def reemplazar_en_tabla_pagare(table):
                 for row in table.rows:
                     for cell in row.cells:
-                        for key, value in replacements.items():
-                            if key in cell.text:
-                                for paragraph in cell.paragraphs:
-                                    if key in paragraph.text:
-                                        paragraph.text = paragraph.text.replace(key, value)
+                        for paragraph in cell.paragraphs:
+                            reemplazar_en_parrafo_pagare(paragraph)
+
+            # Reemplazar en párrafos y tablas del cuerpo
+            for paragraph in doc.paragraphs:
+                reemplazar_en_parrafo_pagare(paragraph)
+            for table in doc.tables:
+                reemplazar_en_tabla_pagare(table)
+            # Reemplazar también en encabezados y pies por si el template los usa.
+            for section in doc.sections:
+                for paragraph in section.header.paragraphs:
+                    reemplazar_en_parrafo_pagare(paragraph)
+                for table in section.header.tables:
+                    reemplazar_en_tabla_pagare(table)
+                for paragraph in section.footer.paragraphs:
+                    reemplazar_en_parrafo_pagare(paragraph)
+                for table in section.footer.tables:
+                    reemplazar_en_tabla_pagare(table)
             
             # Guardar temporalmente
             temp_path = f'temp/pagare_prestamo_{prestamo_id}_cuota_{cuota.numero_cuota}.docx'
